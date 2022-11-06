@@ -243,7 +243,10 @@ void Simulator::PushAllPlatform() {
 void Simulator::UpdateAllWA() {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
-
+            if (waitingAreas[i][j].empty() || platformTroons.element[i][j] != -1) return;
+            TimeId top = waitingAreas[i][j].top();
+            platformTroons.element[i][j] = top.id;
+            waitingAreas[i][j].pop();
         }
     }
 }
