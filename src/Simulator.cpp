@@ -21,14 +21,18 @@ Simulator::Simulator(
     maxGreenTroon{num_green_trains},
     maxYellowTroon{num_yellow_trains}, maxBlueTroon{num_blue_trains}, num_stations{num_stations} {
 
-    for (auto a: {&linkAdjList,
-                  &linkCounters,
+    for (auto a: {&linkCounters,
                   &linkCurrentDistances,
+                  &platformCounters}
+            ) {
+        AllocateSquareMatrix0(a, num_stations);
+    }
+
+    for (auto a: {&linkAdjList,
                   &linkTroons,
-                  &platformCounters,
                   &platformTroons}
             ) {
-        AllocateSquareMatrix(a, num_stations);
+        AllocateSquareMatrix1(a, num_stations);
     }
 
     // allocate the mat to linkAdjList
@@ -123,7 +127,15 @@ void Simulator::PopulateForwardReverseMapping(
 void Simulator::Simulate() {
     for (size_t tick = 0; tick < ticks; tick++) {
         // TODO: Fill this with the troon logic
+        UpdateAllLinks();
+
+        PushAllPlatform();
+
         SpawnTroons(tick);
+
+        UpdateAllWA();
+
+        UpdateWaitingPlatform();
 
         PrintTroons(tick);
     }
@@ -203,7 +215,47 @@ void Simulator::SpawnTroons(size_t tick) {
 }
 
 void Simulator::UpdateAllLinks() {
+    for (size_t i = 0; i < num_stations; i++) {
+        for (size_t j = 0; j < num_stations; j++) {
 
+        }
+    }
+}
+
+void Simulator::PushAllPlatform() {
+    for (size_t i = 0; i < num_stations; i++) {
+        for (size_t j = 0; j < num_stations; j++) {
+            bool isReadyToGo = platformCounters.element[i][j] >= platformPopularities[i];
+
+            if (platformTroons.element[i][j] == -1 || !isReadyToGo) return;
+
+            Troon* troon = troons[platformTroons.element[i][j]];
+            if (linkTroons.element[i][j] != -1 || linkCounters.element[i][j] < 1) return;
+
+            platformCounters.element[i][j] = 0;
+            linkTroons.element[i][j] = troon->id;
+            troon->location = LINK;
+            platformTroons.element[i][j] = -1;
+        }
+    }
+}
+
+void Simulator::UpdateAllWA() {
+    for (size_t i = 0; i < num_stations; i++) {
+        for (size_t j = 0; j < num_stations; j++) {
+
+        }
+    }
+}
+
+void Simulator::UpdateWaitingPlatform() {
+    for (size_t i = 0; i < num_stations; i++) {
+        for (size_t j = 0; j < num_stations; j++) {
+            if (platformTroons.element[i][j] != -1) {
+                platformCounters.element[i][j]++;
+            }
+        }
+    }
 }
 
 void Simulator::PrintTroons(size_t tick) const {
@@ -220,7 +272,7 @@ void Simulator::PrintTroons(size_t tick) const {
     }
 }
 
-void Simulator::AllocateSquareMatrix(matrix *m, size_t size) {
+void Simulator::AllocateSquareMatrix0(matrix0 *m, size_t size) {
     m->element = new uint *[size];
     if (m->element == nullptr) {
         cerr << "Out of Memory \n";
@@ -238,13 +290,39 @@ void Simulator::AllocateSquareMatrix(matrix *m, size_t size) {
     }
 }
 
+void Simulator::AllocateSquareMatrix1(matrix1 *m, size_t size) {
+    m->element = new int *[size];
+    if (m->element == nullptr) {
+        cerr << "Out of Memory \n";
+    }
+
+    for (size_t i = 0; i < size; i++) {
+        m->element[i] = new int[size];
+        if (m->element[i] == nullptr) {
+            cerr << "Out of Memory \n";
+        }
+
+        for (size_t j = 0; j < size; j++) {
+            m->element[i][j] = 0;
+        }
+    }
+}
+
 void Simulator::Clean() {
     for (auto a: {&linkAdjList,
-                  &linkCounters,
-                  &linkCurrentDistances,
                   &linkTroons,
-                  &platformCounters,
                   &platformTroons}
+            ) {
+        for (size_t i = 0; i < num_stations; i++) {
+            delete[] a->element[i];
+        }
+
+        delete[] a->element;
+    }
+
+    for (auto a: {&linkCounters,
+                  &linkCurrentDistances,
+                  &platformCounters}
             ) {
         for (size_t i = 0; i < num_stations; i++) {
             delete[] a->element[i];

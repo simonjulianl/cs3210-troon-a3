@@ -16,7 +16,11 @@ using std::map;
 
 typedef struct {
     uint **element;
-} matrix;
+} matrix0;
+
+typedef struct {
+    int **element;
+} matrix1;
 
 using adjmatrix = vector<vector<size_t>>;
 
@@ -42,10 +46,12 @@ private:
     int troonIdCounter = 0;
 
     // Link State
-    matrix linkAdjList{}, linkCounters{}, linkCurrentDistances{}, linkTroons{};
+    matrix1 linkAdjList{}, linkTroons{};
+    matrix0 linkCounters{}, linkCurrentDistances{};
 
     // Platform State
-    matrix platformCounters{}, platformTroons{};
+    matrix1 platformTroons{};
+    matrix0 platformCounters{};
     vector<size_t> platformPopularities;
 
     // Waiting Area State
@@ -103,13 +109,21 @@ public:
             size_t num_lines
     );
 
-    static void AllocateSquareMatrix(matrix *m, size_t size);
+    static void AllocateSquareMatrix0(matrix0 *m, size_t size);
+
+    static void AllocateSquareMatrix1(matrix1 *m, size_t size);
 
     void Simulate();
 
     void SpawnTroons(size_t tick);
 
     void UpdateAllLinks();
+
+    void PushAllPlatform();
+
+    void UpdateAllWA();
+
+    void UpdateWaitingPlatform();
 
     void Clean();
 
