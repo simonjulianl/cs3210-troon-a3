@@ -71,6 +71,10 @@ Simulator::Simulator(
             &forwardBlueMap,
             &reverseBlueMap
     );
+
+    // initialize troon vector size
+    size_t maxTroon = maxBlueTroon + maxGreenTroon + maxYellowTroon;
+    troons.reserve(maxTroon);
 }
 
 void Simulator::PopulateForwardReverseMapping(
@@ -109,11 +113,71 @@ void Simulator::PopulateForwardReverseMapping(
 void Simulator::Simulate() {
     for (size_t tick = 0; tick < ticks; tick++) {
         // TODO: Fill this with the troon logic
+        SpawnTroons();
 
         PrintTroons(tick);
     }
 
     Clean();
+}
+
+void Simulator::SpawnTroons() {
+    // g -> y -> b
+    if (greenTroonCounter < maxGreenTroon) {
+        auto t = new Troon{troonIdCounter, g, WAITING_AREA, FORWARD};
+        t->setSourceDestination(terminalGreenForward, forwardGreenMap[terminalGreenForward]);
+        greenTroons.insert(t);
+        troons.push_back(t);
+        troonIdCounter++;
+        greenTroonCounter++;
+
+        if (greenTroonCounter < maxGreenTroon) {
+            auto x = new Troon{troonIdCounter, g, WAITING_AREA, REVERSE};
+            x->setSourceDestination(terminalGreenReverse, reverseGreenMap[terminalGreenReverse]);
+            greenTroons.insert(x);
+            troons.push_back(x);
+            troonIdCounter++;
+            greenTroonCounter++;
+        }
+    }
+
+
+    if (yellowTroonCounter < maxYellowTroon) {
+        auto t = new Troon{troonIdCounter, y, WAITING_AREA, FORWARD};
+        t->setSourceDestination(terminalYellowForward, forwardYellowMap[terminalYellowForward]);
+        yellowTroons.insert(t);
+        troons.push_back(t);
+        troonIdCounter++;
+        yellowTroonCounter++;
+
+        if (yellowTroonCounter < maxYellowTroon) {
+            auto x = new Troon{troonIdCounter, y, WAITING_AREA, REVERSE};
+            x->setSourceDestination(terminalYellowReverse, reverseYellowMap[terminalYellowReverse]);
+            yellowTroons.insert(x);
+            troons.push_back(x);
+            troonIdCounter++;
+            yellowTroonCounter++;
+        }
+    }
+
+
+    if (blueTroonCounter < maxBlueTroon) {
+        auto t = new Troon{troonIdCounter, b, WAITING_AREA, FORWARD};
+        t->setSourceDestination(terminalBlueForward, forwardBlueMap[terminalBlueForward]);
+        blueTroons.insert(t);
+        troons.push_back(t);
+        troonIdCounter++;
+        blueTroonCounter++;
+
+        if (blueTroonCounter < maxBlueTroon) {
+            auto x = new Troon{troonIdCounter, b, WAITING_AREA, REVERSE};
+            x->setSourceDestination(terminalBlueReverse, reverseBlueMap[terminalBlueReverse]);
+            blueTroons.insert(x);
+            troons.push_back(x);
+            troonIdCounter++;
+            blueTroonCounter++;
+        }
+    }
 }
 
 void Simulator::PrintTroons(size_t tick) const {

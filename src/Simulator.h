@@ -56,6 +56,8 @@ private:
     set<Troon *, TroonLexicographyComparison> yellowTroons;
     set<Troon *, TroonLexicographyComparison> blueTroons;
 
+    vector<Troon *> troons;
+
     size_t greenTroonCounter = 0;
     size_t yellowTroonCounter = 0;
     size_t blueTroonCounter = 0;
@@ -104,6 +106,8 @@ public:
     static void AllocateSquareMatrix(matrix *m, size_t size);
 
     void Simulate();
+
+    void SpawnTroons();
 
     void Clean();
 

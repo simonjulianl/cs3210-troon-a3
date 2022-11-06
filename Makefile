@@ -9,6 +9,7 @@ APPNAME:=troons
 SOURCES := $(shell find $(SOURCEDIR) -name '*.cpp')
 TESTCASESDIR=testcases
 TESTCASEFILE:= $(TESTCASESDIR)/example.in
+SIMPLETESTCASEFILE := $(TESTCASESDIR)/sample1.in
 
 .PHONY: all clean test generateTest quickTest
 all: submission
@@ -31,3 +32,6 @@ generateTest: lib/GenerateTest.cpp
 
 quickTest: clean submission
 	./$(APPNAME) $(TESTCASEFILE)
+
+simpleTest: clean submission
+	./$(APPNAME) $(SIMPLETESTCASEFILE)
