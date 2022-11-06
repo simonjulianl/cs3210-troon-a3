@@ -127,7 +127,7 @@ void Simulator::PopulateForwardReverseMapping(
 void Simulator::Simulate() {
     for (size_t tick = 0; tick < ticks; tick++) {
         // TODO: Fill this with the troon logic
-        UpdateAllLinks();
+        UpdateAllLinks(tick);
 
         PushAllPlatform();
 
@@ -214,10 +214,94 @@ void Simulator::SpawnTroons(size_t tick) {
     }
 }
 
-void Simulator::UpdateAllLinks() {
+void Simulator::UpdateAllLinks(size_t tick) {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
+            if (linkTroons.element[i][j] == -1) {
+                linkCounters.element[i][j]++;
+                continue;
+            }
 
+            if ((int) linkCurrentDistances.element[i][j] == linkAdjList.element[i][j] - 1) {
+                Troon* curr = troons[linkTroons.element[i][j]];
+                curr->location = WAITING_AREA;
+                size_t source = j;
+                size_t destination;
+                switch (curr->line) {
+                    case g:
+                        if (curr->direction == FORWARD) {
+                            if (j == terminalGreenReverse) {
+                                destination = reverseGreenMap[j];
+                                curr->setSourceDestination(j, destination);
+                                curr->direction = REVERSE;
+                            } else {
+                                destination = forwardGreenMap[j];
+                                curr->setSourceDestination(j, destination);
+                            }
+                        } else if (curr->direction == REVERSE) {
+                            if (j == terminalGreenForward) {
+                                destination = forwardGreenMap[j];
+                                curr->setSourceDestination(j, destination);
+                                curr->direction = FORWARD;
+                            } else {
+                                destination = reverseGreenMap[j];
+                                curr->setSourceDestination(j, destination);
+                            }
+                        }
+                        break;
+                    case y:
+                        if (curr->direction == FORWARD) {
+                            if (j == terminalYellowReverse) {
+                                destination = reverseYellowMap[j];
+                                curr->setSourceDestination(j, destination);
+                                curr->direction = REVERSE;
+                            } else {
+                                destination = forwardYellowMap[j];
+                                curr->setSourceDestination(j, destination);
+                            }
+                        } else if (curr->direction == REVERSE) {
+                            if (j == terminalYellowForward) {
+                                destination = forwardYellowMap[j];
+                                curr->setSourceDestination(j, destination);
+                                curr->direction = FORWARD;
+                            } else {
+                                destination = reverseYellowMap[j];
+                                curr->setSourceDestination(j, destination);
+                            }
+                        }
+                        break;
+                    case b:
+                        if (curr->direction == FORWARD) {
+                            if (j == terminalBlueReverse) {
+                                destination = reverseBlueMap[j];
+                                curr->setSourceDestination(j, destination);
+                                curr->direction = REVERSE;
+                            } else {
+                                destination = forwardBlueMap[j];
+                                curr->setSourceDestination(j, destination);
+                            }
+                        } else if (curr->direction == REVERSE) {
+                             if (j == terminalBlueForward) {
+                                destination = forwardBlueMap[j];
+                                curr->setSourceDestination(j, destination);
+                                curr->direction = FORWARD;
+                            } else {
+                                destination = reverseBlueMap[j];
+                                curr->setSourceDestination(j, destination);    
+                            }                       
+                        }
+                        break;
+                }
+
+                linkCounters.element[i][j] = 0;
+                linkCurrentDistances.element[i][j] = 0;
+                linkTroons.element[i][j] = -1;
+
+                TimeId temp = {tick, curr->id};
+                waitingAreas[source][destination].push(temp);
+            } else {
+                linkCurrentDistances.element[i][j]++;
+            }
         }
     }
 }
@@ -225,12 +309,14 @@ void Simulator::UpdateAllLinks() {
 void Simulator::PushAllPlatform() {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
-            bool isReadyToGo = platformCounters.element[i][j] >= platformPopularities[i];
+            bool isReadyToGo = platformCounters.element[i][j] >= platformPopularities[i] + 2;
+            //cout << i << "," << j << ":" << platformCounters.element[i][j] << "popularity: "<< platformPopularities[i] << "\n";
 
-            if (platformTroons.element[i][j] == -1 || !isReadyToGo) return;
+            if (platformTroons.element[i][j] == -1 || !isReadyToGo) continue;
 
             Troon* troon = troons[platformTroons.element[i][j]];
-            if (linkTroons.element[i][j] != -1 || linkCounters.element[i][j] < 1) return;
+            if (linkTroons.element[i][j] != -1 || linkCounters.element[i][j] < 1) continue;
+            //cout << i << "," << j << ":" << linkTroons.element[i][j] << "counter: "<< linkCounters.element[i][j] << "\n";
 
             platformCounters.element[i][j] = 0;
             linkTroons.element[i][j] = troon->id;
@@ -243,9 +329,11 @@ void Simulator::PushAllPlatform() {
 void Simulator::UpdateAllWA() {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
-            if (waitingAreas[i][j].empty() || platformTroons.element[i][j] != -1) return;
+            //cout << i << "," << j << ":" <<waitingAreas[i][j].size() << "platform: "<< platformTroons.element[i][j] << "\n";
+            if (waitingAreas[i][j].empty() || platformTroons.element[i][j] != -1) continue;
             TimeId top = waitingAreas[i][j].top();
             platformTroons.element[i][j] = top.id;
+            troons[top.id]->location = PLATFORM;
             waitingAreas[i][j].pop();
         }
     }
@@ -306,7 +394,7 @@ void Simulator::AllocateSquareMatrix1(matrix1 *m, size_t size) {
         }
 
         for (size_t j = 0; j < size; j++) {
-            m->element[i][j] = 0;
+            m->element[i][j] = -1;
         }
     }
 }
