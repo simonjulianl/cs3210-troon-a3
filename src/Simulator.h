@@ -110,7 +110,7 @@ public:
     void PrintTroons(size_t tick) const;
 
     void PopulateForwardReverseMapping(
-            size_t num_stations,
+            size_t size,
             const vector<string> &green_station_names,
             size_t *terminalForward,
             size_t *terminalBackward,

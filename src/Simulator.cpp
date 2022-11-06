@@ -46,7 +46,7 @@ Simulator::Simulator(
     }
 
     PopulateForwardReverseMapping(
-            num_stations,
+            green_station_names.size(),
             green_station_names,
             &terminalGreenForward,
             &terminalGreenReverse,
@@ -55,7 +55,7 @@ Simulator::Simulator(
     );
 
     PopulateForwardReverseMapping(
-            num_stations,
+            yellow_station_names.size(),
             yellow_station_names,
             &terminalYellowForward,
             &terminalYellowReverse,
@@ -64,7 +64,7 @@ Simulator::Simulator(
     );
 
     PopulateForwardReverseMapping(
-            num_stations,
+            blue_station_names.size(),
             blue_station_names,
             &terminalBlueForward,
             &terminalBlueReverse,
@@ -74,7 +74,7 @@ Simulator::Simulator(
 }
 
 void Simulator::PopulateForwardReverseMapping(
-        size_t num_stations,
+        size_t size,
         const vector<string> &green_station_names,
         size_t *terminalForward,
         size_t *terminalBackward,
@@ -83,7 +83,7 @@ void Simulator::PopulateForwardReverseMapping(
 ) {
     size_t currentStation, nextStation;
 
-    for (size_t i = 0; i < num_stations - 1; i++) {
+    for (size_t i = 0; i < size - 1; i++) {
         currentStation = stationNameIdMapping[green_station_names[i]];
         nextStation = stationNameIdMapping[green_station_names[i + 1]];
 
@@ -94,11 +94,11 @@ void Simulator::PopulateForwardReverseMapping(
         (*forwardMapping)[currentStation] = nextStation;
     }
 
-    for (size_t i = num_stations - 1; i > 0; i--) {
+    for (size_t i = size - 1; i > 0; i--) {
         currentStation = stationNameIdMapping[green_station_names[i]];
         nextStation = stationNameIdMapping[green_station_names[i - 1]];
 
-        if (i == num_stations - 1) {
+        if (i == size - 1) {
             *terminalBackward = currentStation;
         }
 
