@@ -21,10 +21,10 @@ typedef struct {
 using adjmatrix = vector<vector<size_t>>;
 
 struct TimeId {
-    int time;
+    size_t time;
     int id;
 
-    TimeId(int time, int id) : time(time), id(id) {}
+    TimeId(size_t time, int id) : time(time), id(id) {}
 
     bool operator<(const struct TimeId &other) const {
         if (other.time == time) {
@@ -107,7 +107,9 @@ public:
 
     void Simulate();
 
-    void SpawnTroons();
+    void SpawnTroons(size_t tick);
+
+    void UpdateAllLinks();
 
     void Clean();
 
