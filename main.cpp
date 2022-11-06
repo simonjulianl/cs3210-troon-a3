@@ -18,7 +18,6 @@ void simulate(size_t num_stations,
               const vector<string> &blue_station_names, size_t ticks,
               size_t num_green_trains, size_t num_yellow_trains,
               size_t num_blue_trains, size_t num_lines) {
-    // still buggy, get out of index lol
     Simulator s{
             num_stations,
             station_names,
