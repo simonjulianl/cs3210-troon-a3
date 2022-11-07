@@ -32,3 +32,4 @@
 *.app
 troons
 generateTest
+./testcases/generatedInput.in
