@@ -145,10 +145,11 @@ void Simulator::Simulate() {
 
 void Simulator::SpawnTroons(size_t tick) {
     // g -> y -> b
+    TimeId temp{0, 0};
     if (greenTroonCounter < maxGreenTroon) {
         auto t = new Troon{troonIdCounter, g, WAITING_AREA, FORWARD};
         t->setSourceDestination(terminalGreenForward, forwardGreenMap[terminalGreenForward]);
-        TimeId temp = {tick, troonIdCounter};
+        temp = {tick, troonIdCounter};
         waitingAreas[terminalGreenForward][forwardGreenMap[terminalGreenForward]].push(temp);
         greenTroons.insert(t);
         troons.push_back(t);
@@ -158,7 +159,7 @@ void Simulator::SpawnTroons(size_t tick) {
         if (greenTroonCounter < maxGreenTroon) {
             auto x = new Troon{troonIdCounter, g, WAITING_AREA, REVERSE};
             x->setSourceDestination(terminalGreenReverse, reverseGreenMap[terminalGreenReverse]);
-            TimeId temp = {tick, troonIdCounter};
+            temp = {tick, troonIdCounter};
             waitingAreas[terminalGreenReverse][reverseGreenMap[terminalGreenReverse]].push(temp);
             greenTroons.insert(x);
             troons.push_back(x);
@@ -171,7 +172,7 @@ void Simulator::SpawnTroons(size_t tick) {
     if (yellowTroonCounter < maxYellowTroon) {
         auto t = new Troon{troonIdCounter, y, WAITING_AREA, FORWARD};
         t->setSourceDestination(terminalYellowForward, forwardYellowMap[terminalYellowForward]);
-        TimeId temp = {tick, troonIdCounter};
+        temp = {tick, troonIdCounter};
         waitingAreas[terminalYellowForward][forwardYellowMap[terminalYellowForward]].push(temp);
         yellowTroons.insert(t);
         troons.push_back(t);
@@ -181,7 +182,7 @@ void Simulator::SpawnTroons(size_t tick) {
         if (yellowTroonCounter < maxYellowTroon) {
             auto x = new Troon{troonIdCounter, y, WAITING_AREA, REVERSE};
             x->setSourceDestination(terminalYellowReverse, reverseYellowMap[terminalYellowReverse]);
-            TimeId temp = {tick, troonIdCounter};
+            temp = {tick, troonIdCounter};
             waitingAreas[terminalYellowReverse][reverseYellowMap[terminalYellowReverse]].push(temp);
             yellowTroons.insert(x);
             troons.push_back(x);
@@ -194,7 +195,7 @@ void Simulator::SpawnTroons(size_t tick) {
     if (blueTroonCounter < maxBlueTroon) {
         auto t = new Troon{troonIdCounter, b, WAITING_AREA, FORWARD};
         t->setSourceDestination(terminalBlueForward, forwardBlueMap[terminalBlueForward]);
-        TimeId temp = {tick, troonIdCounter};
+        temp = {tick, troonIdCounter};
         waitingAreas[terminalBlueForward][forwardBlueMap[terminalBlueForward]].push(temp);
         blueTroons.insert(t);
         troons.push_back(t);
@@ -204,7 +205,7 @@ void Simulator::SpawnTroons(size_t tick) {
         if (blueTroonCounter < maxBlueTroon) {
             auto x = new Troon{troonIdCounter, b, WAITING_AREA, REVERSE};
             x->setSourceDestination(terminalBlueReverse, reverseBlueMap[terminalBlueReverse]);
-            TimeId temp = {tick, troonIdCounter};
+            temp = {tick, troonIdCounter};
             waitingAreas[terminalBlueReverse][reverseBlueMap[terminalBlueReverse]].push(temp);
             blueTroons.insert(x);
             troons.push_back(x);
@@ -223,7 +224,7 @@ void Simulator::UpdateAllLinks(size_t tick) {
             }
 
             if ((int) linkCurrentDistances.element[i][j] == linkAdjList.element[i][j] - 1) {
-                Troon* curr = troons[linkTroons.element[i][j]];
+                Troon *curr = troons[linkTroons.element[i][j]];
                 curr->location = WAITING_AREA;
                 size_t source = j;
                 size_t destination;
@@ -281,14 +282,14 @@ void Simulator::UpdateAllLinks(size_t tick) {
                                 curr->setSourceDestination(j, destination);
                             }
                         } else if (curr->direction == REVERSE) {
-                             if (j == terminalBlueForward) {
+                            if (j == terminalBlueForward) {
                                 destination = forwardBlueMap[j];
                                 curr->setSourceDestination(j, destination);
                                 curr->direction = FORWARD;
                             } else {
                                 destination = reverseBlueMap[j];
-                                curr->setSourceDestination(j, destination);    
-                            }                       
+                                curr->setSourceDestination(j, destination);
+                            }
                         }
                         break;
                 }
@@ -314,7 +315,7 @@ void Simulator::PushAllPlatform() {
 
             if (platformTroons.element[i][j] == -1 || !isReadyToGo) continue;
 
-            Troon* troon = troons[platformTroons.element[i][j]];
+            Troon *troon = troons[platformTroons.element[i][j]];
             if (linkTroons.element[i][j] != -1 || linkCounters.element[i][j] < 1) continue;
             //cout << i << "," << j << ":" << linkTroons.element[i][j] << "counter: "<< linkCounters.element[i][j] << "\n";
 
@@ -339,7 +340,7 @@ void Simulator::UpdateAllWA() {
     }
 }
 
-void Simulator::UpdateWaitingPlatform() {
+void Simulator::UpdateWaitingPlatform() const {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
             if (platformTroons.element[i][j] != -1) {
@@ -363,7 +364,7 @@ void Simulator::PrintTroons(size_t tick) const {
     }
 }
 
-void Simulator::AllocateSquareMatrix0(matrix0 *m, size_t size) {
+void Simulator::AllocateSquareMatrix0(matrix_uint *m, size_t size) {
     m->element = new uint *[size];
     if (m->element == nullptr) {
         cerr << "Out of Memory \n";
@@ -381,7 +382,7 @@ void Simulator::AllocateSquareMatrix0(matrix0 *m, size_t size) {
     }
 }
 
-void Simulator::AllocateSquareMatrix1(matrix1 *m, size_t size) {
+void Simulator::AllocateSquareMatrix1(matrix_int *m, size_t size) {
     m->element = new int *[size];
     if (m->element == nullptr) {
         cerr << "Out of Memory \n";

@@ -16,11 +16,11 @@ using std::map;
 
 typedef struct {
     uint **element;
-} matrix0;
+} matrix_uint;
 
 typedef struct {
     int **element;
-} matrix1;
+} matrix_int;
 
 using adjmatrix = vector<vector<size_t>>;
 
@@ -46,12 +46,12 @@ private:
     int troonIdCounter = 0;
 
     // Link State
-    matrix1 linkAdjList{}, linkTroons{};
-    matrix0 linkCounters{}, linkCurrentDistances{};
+    matrix_int linkAdjList{}, linkTroons{};
+    matrix_uint linkCounters{}, linkCurrentDistances{};
 
     // Platform State
-    matrix1 platformTroons{};
-    matrix0 platformCounters{};
+    matrix_int platformTroons{};
+    matrix_uint platformCounters{};
     vector<size_t> platformPopularities;
 
     // Waiting Area State
@@ -78,12 +78,12 @@ private:
     map<string, size_t> stationNameIdMapping;
     vector<string> stationIdNameMapping;
 
-    size_t terminalGreenForward;
-    size_t terminalGreenReverse;
-    size_t terminalYellowForward;
-    size_t terminalYellowReverse;
-    size_t terminalBlueForward;
-    size_t terminalBlueReverse;
+    size_t terminalGreenForward{};
+    size_t terminalGreenReverse{};
+    size_t terminalYellowForward{};
+    size_t terminalYellowReverse{};
+    size_t terminalBlueForward{};
+    size_t terminalBlueReverse{};
 
     // mapping for the next station in forward and reverse dir for each lane
     map<size_t, size_t> forwardGreenMap;
@@ -109,9 +109,9 @@ public:
             size_t num_lines
     );
 
-    static void AllocateSquareMatrix0(matrix0 *m, size_t size);
+    static void AllocateSquareMatrix0(matrix_uint *m, size_t size);
 
-    static void AllocateSquareMatrix1(matrix1 *m, size_t size);
+    static void AllocateSquareMatrix1(matrix_int *m, size_t size);
 
     void Simulate();
 
@@ -123,7 +123,7 @@ public:
 
     void UpdateAllWA();
 
-    void UpdateWaitingPlatform();
+    void UpdateWaitingPlatform() const;
 
     void Clean();
 

@@ -1,17 +1,16 @@
-# CXX=mpiCC
+#CXX=mpiCC
 CXX=g++
-#CXXFLAGS:=-Wall -Wextra -Werror -pedantic -std=c++17
-CXXFLAGS:=-Wall -Wextra -pedantic -std=c++17
+CXXFLAGS:=-Wall -Wextra -Werror -pedantic -std=c++17
 RELEASEFLAGS:=-O3
 DEBUGFLAGS:=-g
 SOURCEDIR=src
 APPNAME:=troons
 SOURCES := $(shell find $(SOURCEDIR) -name '*.cpp')
 TESTCASESDIR=testcases
-TESTCASEFILE:= $(TESTCASESDIR)/example.in
-SIMPLETESTCASEFILE := $(TESTCASESDIR)/sample1.in
+TESTCASEFILE:= $(TESTCASESDIR)/generatedInput.in
+SIMPLETESTCASEFILE := $(TESTCASESDIR)/sample2.in
 
-.PHONY: all clean test generateTest quickTest
+.PHONY: all clean test generateTest quickTest compareOutput
 all: submission
 
 submission: main.o
@@ -21,17 +20,22 @@ main.o: main.cpp
 	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -c $^ $(SOURCES)
 
 clean:
-	$(RM) *.o troons test generateTest
+	$(RM) *.o troons test generateTest *.out
 
 debug: main.cpp
 	$(CXX) $(CXXFLAGS) $(DEBUGFLAGS) -D DEBUG -o troons main.cpp $(SOURCES)
 
 generateTest: lib/GenerateTest.cpp
 	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o generateTest $^
-	./generateTest 5000 5000 4000 > $(TESTCASEFILE)
+	./generateTest 17000 200000 5 > $(TESTCASEFILE)
 
 quickTest: clean submission
 	./$(APPNAME) $(TESTCASEFILE)
 
 simpleTest: clean submission
 	./$(APPNAME) $(SIMPLETESTCASEFILE)
+
+compareOutput: clean submission
+	./$(APPNAME) $(SIMPLETESTCASEFILE) > troons.out
+	./troons_seq $(SIMPLETESTCASEFILE) > troons_seq.out
+	diff -ZB troons.out troons_seq.out
