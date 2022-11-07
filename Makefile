@@ -10,8 +10,13 @@ TESTCASESDIR=testcases
 TESTCASEFILE:= $(TESTCASESDIR)/generatedInput.in
 SIMPLETESTCASEFILE := $(TESTCASESDIR)/sample2.in
 
-.PHONY: all clean test generateTest quickTest compareOutput
+.PHONY: all clean test generateTest quickTest compareOutput compareTimingSeq
 all: submission
+
+compareTimingSeq: clean submission generateTest
+	mkdir -p result
+	perf stat -o result/our_result.out ./$(APPNAME) $(TESTCASEFILE)
+	perf stat -o result/troons_seq1_result.out ./troons_seq $(TESTCASEFILE)
 
 submission: main.o
 	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o $(APPNAME) $^ $(shell find -name '*.o' ! -name 'main.o')
@@ -27,7 +32,7 @@ debug: main.cpp
 
 generateTest: lib/GenerateTest.cpp
 	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o generateTest $^
-	./generateTest 17000 200000 5 > $(TESTCASEFILE)
+	./generateTest 1000 1000 5 > $(TESTCASEFILE)
 
 quickTest: clean submission
 	./$(APPNAME) $(TESTCASEFILE)

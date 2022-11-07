@@ -117,6 +117,8 @@ public:
 
     void SpawnTroons(size_t tick);
 
+    void IncrementAllLinks() const;
+
     void UpdateAllLinks(size_t tick);
 
     void PushAllPlatform();

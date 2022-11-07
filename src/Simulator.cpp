@@ -38,7 +38,7 @@ Simulator::Simulator(
     // allocate the mat to linkAdjList
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
-            linkAdjList.element[i][j] = mat[i][j];
+            linkAdjList.element[i][j] = static_cast<int>(mat[i][j]);
         }
     }
 
@@ -126,7 +126,8 @@ void Simulator::PopulateForwardReverseMapping(
 
 void Simulator::Simulate() {
     for (size_t tick = 0; tick < ticks; tick++) {
-        // TODO: Fill this with the troon logic
+        IncrementAllLinks();
+
         UpdateAllLinks(tick);
 
         PushAllPlatform();
@@ -215,15 +216,23 @@ void Simulator::SpawnTroons(size_t tick) {
     }
 }
 
-void Simulator::UpdateAllLinks(size_t tick) {
+//TODO: Parallelize this with OpenMPI
+void Simulator::IncrementAllLinks() const {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
             if (linkTroons.element[i][j] == -1) {
                 linkCounters.element[i][j]++;
-                continue;
             }
+        }
+    }
+}
 
-            if ((int) linkCurrentDistances.element[i][j] == linkAdjList.element[i][j] - 1) {
+void Simulator::UpdateAllLinks(size_t tick) {
+    for (size_t i = 0; i < num_stations; i++) {
+        for (size_t j = 0; j < num_stations; j++) {
+            if (linkTroons.element[i][j] == -1) continue;
+
+            if ((int) linkCurrentDistances.element[i][j] >= linkAdjList.element[i][j] - 1) {
                 Troon *curr = troons[linkTroons.element[i][j]];
                 curr->location = WAITING_AREA;
                 size_t source = j;
@@ -340,6 +349,7 @@ void Simulator::UpdateAllWA() {
     }
 }
 
+//TODO: Parallelize this with OpenMPI
 void Simulator::UpdateWaitingPlatform() const {
     for (size_t i = 0; i < num_stations; i++) {
         for (size_t j = 0; j < num_stations; j++) {
@@ -423,4 +433,3 @@ void Simulator::Clean() {
         delete[] a->element;
     }
 }
-
