@@ -17,9 +17,11 @@ Simulator::Simulator(
         size_t num_yellow_trains,
         size_t num_blue_trains,
         size_t num_lines
-) : ticks{ticks}, linesToBePrinted{num_lines}, platformPopularities{popularities},
-    maxGreenTroon{num_green_trains},
-    maxYellowTroon{num_yellow_trains}, maxBlueTroon{num_blue_trains}, num_stations{num_stations} {
+) : ticks{static_cast<uint32_t>(ticks)}, linesToBePrinted{static_cast<uint32_t>(num_lines)},
+    platformPopularities{popularities},
+    maxGreenTroon{static_cast<uint32_t>(num_green_trains)},
+    maxYellowTroon{static_cast<uint32_t>(num_yellow_trains)}, maxBlueTroon{static_cast<uint32_t>(num_blue_trains)},
+    num_stations{static_cast<uint32_t>(num_stations)} {
 
     for (auto a: {&linkCounters,
                   &linkCurrentDistances,
@@ -92,16 +94,16 @@ Simulator::Simulator(
 }
 
 void Simulator::PopulateForwardReverseMapping(
-        size_t size,
+        uint32_t size,
         const vector<string> &green_station_names,
-        size_t *terminalForward,
-        size_t *terminalBackward,
-        map<size_t, size_t> *forwardMapping,
-        map<size_t, size_t> *reverseMapping
+        uint32_t *terminalForward,
+        uint32_t *terminalBackward,
+        map<uint32_t, uint32_t> *forwardMapping,
+        map<uint32_t, uint32_t> *reverseMapping
 ) {
-    size_t currentStation, nextStation;
+    uint32_t currentStation, nextStation;
 
-    for (size_t i = 0; i < size - 1; i++) {
+    for (uint32_t i = 0; i < size - 1; i++) {
         currentStation = stationNameIdMapping[green_station_names[i]];
         nextStation = stationNameIdMapping[green_station_names[i + 1]];
 
@@ -112,7 +114,7 @@ void Simulator::PopulateForwardReverseMapping(
         (*forwardMapping)[currentStation] = nextStation;
     }
 
-    for (size_t i = size - 1; i > 0; i--) {
+    for (uint32_t i = size - 1; i > 0; i--) {
         currentStation = stationNameIdMapping[green_station_names[i]];
         nextStation = stationNameIdMapping[green_station_names[i - 1]];
 
@@ -125,7 +127,7 @@ void Simulator::PopulateForwardReverseMapping(
 }
 
 void Simulator::Simulate() {
-    for (size_t tick = 0; tick < ticks; tick++) {
+    for (uint32_t tick = 0; tick < ticks; tick++) {
         IncrementAllLinks();
 
         UpdateAllLinks(tick);
@@ -144,9 +146,9 @@ void Simulator::Simulate() {
     Clean();
 }
 
-void Simulator::SpawnTroons(size_t tick) {
+void Simulator::SpawnTroons(uint32_t tick) {
     // g -> y -> b
-    TimeId temp{0, 0};
+    TimeId temp;
     if (greenTroonCounter < maxGreenTroon) {
         auto t = new Troon{troonIdCounter, g, WAITING_AREA, FORWARD};
         t->setSourceDestination(terminalGreenForward, forwardGreenMap[terminalGreenForward]);
@@ -227,16 +229,16 @@ void Simulator::IncrementAllLinks() const {
     }
 }
 
-void Simulator::UpdateAllLinks(size_t tick) {
-    for (size_t i = 0; i < num_stations; i++) {
-        for (size_t j = 0; j < num_stations; j++) {
+void Simulator::UpdateAllLinks(uint32_t tick) {
+    for (uint32_t i = 0; i < num_stations; i++) {
+        for (uint32_t j = 0; j < num_stations; j++) {
             if (linkTroons.element[i][j] == -1) continue;
 
             if ((int) linkCurrentDistances.element[i][j] >= linkAdjList.element[i][j] - 1) {
                 Troon *curr = troons[linkTroons.element[i][j]];
                 curr->location = WAITING_AREA;
-                size_t source = j;
-                size_t destination;
+                uint32_t source = j;
+                uint32_t destination = 0;
                 switch (curr->line) {
                     case g:
                         if (curr->direction == FORWARD) {
@@ -329,7 +331,7 @@ void Simulator::PushAllPlatform() {
             //cout << i << "," << j << ":" << linkTroons.element[i][j] << "counter: "<< linkCounters.element[i][j] << "\n";
 
             platformCounters.element[i][j] = 0;
-            linkTroons.element[i][j] = troon->id;
+            linkTroons.element[i][j] = static_cast<int32_t>(troon->id);
             troon->location = LINK;
             platformTroons.element[i][j] = -1;
         }
@@ -342,7 +344,7 @@ void Simulator::UpdateAllWA() {
             //cout << i << "," << j << ":" <<waitingAreas[i][j].size() << "platform: "<< platformTroons.element[i][j] << "\n";
             if (waitingAreas[i][j].empty() || platformTroons.element[i][j] != -1) continue;
             TimeId top = waitingAreas[i][j].top();
-            platformTroons.element[i][j] = top.id;
+            platformTroons.element[i][j] = static_cast<int32_t>(top.id);
             troons[top.id]->location = PLATFORM;
             waitingAreas[i][j].pop();
         }
@@ -360,7 +362,7 @@ void Simulator::UpdateWaitingPlatform() const {
     }
 }
 
-void Simulator::PrintTroons(size_t tick) const {
+void Simulator::PrintTroons(uint32_t tick) const {
     if (ticks - tick <= linesToBePrinted) {
         stringstream ss;
         ss << tick << ": ";

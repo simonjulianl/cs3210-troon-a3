@@ -15,20 +15,22 @@ using std::priority_queue;
 using std::map;
 
 typedef struct {
-    uint **element;
+    uint32_t **element;
 } matrix_uint;
 
 typedef struct {
-    int **element;
+    int32_t **element;
 } matrix_int;
 
 using adjmatrix = vector<vector<size_t>>;
 
 struct TimeId {
-    size_t time;
-    int id;
+    uint32_t time;
+    uint32_t id;
 
-    TimeId(size_t time, int id) : time(time), id(id) {}
+    TimeId() : time(0), id(0) {}
+
+    TimeId(uint32_t time, uint32_t id) : time(time), id(id) {}
 
     bool operator<(const struct TimeId &other) const {
         if (other.time == time) {
@@ -41,9 +43,9 @@ struct TimeId {
 
 class Simulator {
 private:
-    size_t ticks = 0;
-    size_t linesToBePrinted = 0;
-    int troonIdCounter = 0;
+    uint32_t ticks = 0;
+    uint32_t linesToBePrinted = 0;
+    uint32_t troonIdCounter = 0;
 
     // Link State
     matrix_int linkAdjList{}, linkTroons{};
@@ -64,34 +66,34 @@ private:
 
     vector<Troon *> troons;
 
-    size_t greenTroonCounter = 0;
-    size_t yellowTroonCounter = 0;
-    size_t blueTroonCounter = 0;
+    uint32_t greenTroonCounter = 0;
+    uint32_t yellowTroonCounter = 0;
+    uint32_t blueTroonCounter = 0;
 
-    size_t maxGreenTroon;
-    size_t maxYellowTroon;
-    size_t maxBlueTroon;
+    uint32_t maxGreenTroon;
+    uint32_t maxYellowTroon;
+    uint32_t maxBlueTroon;
 
-    size_t num_stations;
+    uint32_t num_stations;
 
     // Mapping
-    map<string, size_t> stationNameIdMapping;
+    map<string, uint32_t> stationNameIdMapping;
     vector<string> stationIdNameMapping;
 
-    size_t terminalGreenForward{};
-    size_t terminalGreenReverse{};
-    size_t terminalYellowForward{};
-    size_t terminalYellowReverse{};
-    size_t terminalBlueForward{};
-    size_t terminalBlueReverse{};
+    uint32_t terminalGreenForward{};
+    uint32_t terminalGreenReverse{};
+    uint32_t terminalYellowForward{};
+    uint32_t terminalYellowReverse{};
+    uint32_t terminalBlueForward{};
+    uint32_t terminalBlueReverse{};
 
     // mapping for the next station in forward and reverse dir for each lane
-    map<size_t, size_t> forwardGreenMap;
-    map<size_t, size_t> reverseGreenMap;
-    map<size_t, size_t> forwardYellowMap;
-    map<size_t, size_t> reverseYellowMap;
-    map<size_t, size_t> forwardBlueMap;
-    map<size_t, size_t> reverseBlueMap;
+    map<uint32_t, uint32_t> forwardGreenMap;
+    map<uint32_t, uint32_t> reverseGreenMap;
+    map<uint32_t, uint32_t> forwardYellowMap;
+    map<uint32_t, uint32_t> reverseYellowMap;
+    map<uint32_t, uint32_t> forwardBlueMap;
+    map<uint32_t, uint32_t> reverseBlueMap;
 
 public:
     Simulator(
@@ -115,11 +117,11 @@ public:
 
     void Simulate();
 
-    void SpawnTroons(size_t tick);
+    void SpawnTroons(uint32_t tick);
 
     void IncrementAllLinks() const;
 
-    void UpdateAllLinks(size_t tick);
+    void UpdateAllLinks(uint32_t tick);
 
     void PushAllPlatform();
 
@@ -129,15 +131,15 @@ public:
 
     void Clean();
 
-    void PrintTroons(size_t tick) const;
+    void PrintTroons(uint32_t tick) const;
 
     void PopulateForwardReverseMapping(
-            size_t size,
+            uint32_t size,
             const vector<string> &green_station_names,
-            size_t *terminalForward,
-            size_t *terminalBackward,
-            map<size_t, size_t> *forwardMapping,
-            map<size_t, size_t> *reverseMapping
+            uint32_t *terminalForward,
+            uint32_t *terminalBackward,
+            map<uint32_t, uint32_t> *forwardMapping,
+            map<uint32_t, uint32_t> *reverseMapping
     );
 };
 

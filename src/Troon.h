@@ -11,7 +11,7 @@ using std::vector;
 
 class Troon {
 public:
-    int id;
+    uint32_t id;
     Direction direction;
     Line line;
     size_t source;
@@ -19,7 +19,7 @@ public:
     Location location;
 
     explicit Troon(
-            int id,
+            uint32_t id,
             Line line,
             Location location,
             Direction direction
