@@ -32,7 +32,7 @@ debug: main.cpp
 
 generateTest: lib/GenerateTest.cpp
 	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o generateTest $^
-	./generateTest 1000 1000 5 > $(TESTCASEFILE)
+	./generateTest 17000 200000 100 > $(TESTCASEFILE)
 
 quickTest: clean submission
 	./$(APPNAME) $(TESTCASEFILE)
@@ -44,3 +44,8 @@ compareOutput: clean submission
 	./$(APPNAME) $(SIMPLETESTCASEFILE) > troons.out
 	./troons_seq $(SIMPLETESTCASEFILE) > troons_seq.out
 	diff -ZB troons.out troons_seq.out
+
+copySlurm: clean submission
+	cp $(TESTCASEFILE) /nfs/home/${USER}
+	cp ./$(APPNAME) /nfs/home/${USER}
+	# srun -N 1 /nfs/home/${USER}/troons /nfs/home/${USER}/$(TESTCASEFILE) need to be run manually in ~
