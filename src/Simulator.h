@@ -48,7 +48,9 @@ private:
     uint32_t troonIdCounter = 0;
 
     // Link State
-    matrix_int linkAdjList{}, linkTroons{};
+    const adjmatrix *linkLimit;
+
+    matrix_int linkTroons{};
     matrix_uint linkCounters{}, linkCurrentDistances{};
 
     // Platform State

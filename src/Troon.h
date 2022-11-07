@@ -14,8 +14,8 @@ public:
     uint32_t id;
     Direction direction;
     Line line;
-    size_t source;
-    size_t destination;
+    size_t source{};
+    size_t destination{};
     Location location;
 
     explicit Troon(

@@ -30,19 +30,14 @@ Simulator::Simulator(
         AllocateSquareMatrix0(a, num_stations);
     }
 
-    for (auto a: {&linkAdjList,
-                  &linkTroons,
+    for (auto a: {&linkTroons,
                   &platformTroons}
             ) {
         AllocateSquareMatrix1(a, num_stations);
     }
 
     // allocate the mat to linkAdjList
-    for (size_t i = 0; i < num_stations; i++) {
-        for (size_t j = 0; j < num_stations; j++) {
-            linkAdjList.element[i][j] = static_cast<int>(mat[i][j]);
-        }
-    }
+    linkLimit = &mat;
 
     // create mapping
     for (size_t i = 0; i < num_stations; i++) {
@@ -234,7 +229,7 @@ void Simulator::UpdateAllLinks(uint32_t tick) {
         for (uint32_t j = 0; j < num_stations; j++) {
             if (linkTroons.element[i][j] == -1) continue;
 
-            if ((int) linkCurrentDistances.element[i][j] >= linkAdjList.element[i][j] - 1) {
+            if (linkCurrentDistances.element[i][j] >= (*linkLimit)[i][j] - 1) {
                 Troon *curr = troons[linkTroons.element[i][j]];
                 curr->location = WAITING_AREA;
                 uint32_t source = j;
@@ -413,8 +408,7 @@ void Simulator::AllocateSquareMatrix1(matrix_int *m, size_t size) {
 }
 
 void Simulator::Clean() {
-    for (auto a: {&linkAdjList,
-                  &linkTroons,
+    for (auto a: {&linkTroons,
                   &platformTroons}
             ) {
         for (size_t i = 0; i < num_stations; i++) {
