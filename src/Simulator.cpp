@@ -1,6 +1,7 @@
 #include "Simulator.h"
 #include <iostream>
 #include <sstream>
+#include <mpi.h>
 
 using namespace std;
 
@@ -18,12 +19,18 @@ Simulator::Simulator(
         size_t num_blue_trains,
         size_t num_lines,
         int argc,
-        char* argv[]
+        char** argv
 ) : ticks{static_cast<uint32_t>(ticks)}, linesToBePrinted{static_cast<uint32_t>(num_lines)},
     platformPopularities{popularities},
     maxGreenTroon{static_cast<uint32_t>(num_green_trains)},
     maxYellowTroon{static_cast<uint32_t>(num_yellow_trains)}, maxBlueTroon{static_cast<uint32_t>(num_blue_trains)},
     num_stations{static_cast<uint32_t>(num_stations)} {
+
+    // Init MPI
+    int rank, size;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     for (auto a: {&linkCounters,
                   &linkCurrentDistances,
