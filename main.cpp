@@ -16,7 +16,9 @@ void simulate(size_t num_stations,
               const vector<string> &yellow_station_names,
               const vector<string> &blue_station_names, size_t ticks,
               size_t num_green_trains, size_t num_yellow_trains,
-              size_t num_blue_trains, size_t num_lines) {
+              size_t num_blue_trains, size_t num_lines,
+              int argc,
+              const char* argv[]) {
     Simulator s{
             num_stations,
             station_names,
@@ -29,7 +31,9 @@ void simulate(size_t num_stations,
             num_green_trains,
             num_yellow_trains,
             num_blue_trains,
-            num_lines
+            num_lines,
+            argc,
+            argv
     };
 
     s.Simulate();
@@ -162,7 +166,7 @@ int main(int argc, char const *argv[]) {
     ifs >> num_lines;
 
     simulate(S, station_names, popularities, mat, green_station_names,
-             yellow_station_names, blue_station_names, N, g, y, b, num_lines);
+             yellow_station_names, blue_station_names, N, g, y, b, num_lines, argc, argv);
 
     return 0;
 }

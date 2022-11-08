@@ -16,7 +16,9 @@ Simulator::Simulator(
         size_t num_green_trains,
         size_t num_yellow_trains,
         size_t num_blue_trains,
-        size_t num_lines
+        size_t num_lines,
+        int argc,
+        const char* argv[]
 ) : ticks{static_cast<uint32_t>(ticks)}, linesToBePrinted{static_cast<uint32_t>(num_lines)},
     platformPopularities{popularities},
     maxGreenTroon{static_cast<uint32_t>(num_green_trains)},
