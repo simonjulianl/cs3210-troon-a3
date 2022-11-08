@@ -18,7 +18,7 @@ void simulate(size_t num_stations,
               size_t num_green_trains, size_t num_yellow_trains,
               size_t num_blue_trains, size_t num_lines,
               int argc,
-              const char* argv[]) {
+              char* argv[]) {
     Simulator s{
             num_stations,
             station_names,
@@ -95,7 +95,7 @@ vector<string> extract_station_names(string &line) {
     return stations;
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, char *argv[]) {
     using std::cout;
 
     if (argc < 2) {

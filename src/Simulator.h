@@ -112,7 +112,7 @@ public:
             size_t num_blue_trains,
             size_t num_lines,
             int argc,
-            const char* argv[]
+            char* argv[]
     );
 
     static void AllocateSquareMatrix0(matrix_uint *m, size_t size);
