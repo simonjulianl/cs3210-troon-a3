@@ -1,11 +1,11 @@
-CXX=mpiCC
-# CXX=g++
-CXXFLAGS:=-Wall -Werror -pedantic -std=c++17
+#CXX=mpiCC
+CXX=g++
+#CXXFLAGS:=-Wall -Werror -pedantic -std=c++17
+CXXFLAGS:=-Wall -pedantic -std=c++17
 RELEASEFLAGS:=-O3
 DEBUGFLAGS:=-g
 SOURCEDIR=src
 APPNAME:=troons
-SOURCES := $(shell find $(SOURCEDIR) -name '*.cpp')
 TESTCASESDIR=testcases
 TESTCASEFILE:= $(TESTCASESDIR)/generatedInput.in
 SIMPLETESTCASEFILE := $(TESTCASESDIR)/sample2.in
@@ -19,16 +19,16 @@ compareTimingSeq: clean submission generateTest
 	perf stat -o result/troons_seq1_result.out ./troons_seq $(TESTCASEFILE)
 
 submission: main.o
-	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o $(APPNAME) $^ $(shell find -name '*.o' ! -name 'main.o')
+	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o $(APPNAME) $^
 
 main.o: main.cpp
-	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -c $^ $(SOURCES)
+	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -c $^
 
 clean:
 	$(RM) *.o troons test generateTest *.out
 
 debug: main.cpp
-	$(CXX) $(CXXFLAGS) $(DEBUGFLAGS) -D DEBUG -o troons main.cpp $(SOURCES)
+	$(CXX) $(CXXFLAGS) $(DEBUGFLAGS) -D DEBUG -o troons $^
 
 generateTest: lib/GenerateTest.cpp
 	$(CXX) $(CXXFLAGS) $(RELEASEFLAGS) -o generateTest $^
