@@ -26,6 +26,15 @@ struct Troon {
     size_t dest = 0;
     size_t location = 0;
     size_t line = 0;
+
+    explicit Troon(
+            size_t arrivalTime,
+            size_t id,
+            size_t src,
+            size_t dest,
+            size_t location,
+            size_t line
+    ) : arrivalTime{arrivalTime}, id{id}, src{src}, dest{dest}, location{location}, line{line} {};
 };
 
 struct staticLinkState {
@@ -45,9 +54,9 @@ struct staticLinkState {
 struct TroonComparison {
     bool operator()(const Troon *a, const Troon *b) const {
         if (a->arrivalTime == b->arrivalTime) {
-            return a->id < b->id;
+            return a->id > b->id;
         } else {
-            return a->arrivalTime < b->arrivalTime;
+            return a->arrivalTime > b->arrivalTime;
         }
     }
 };
@@ -60,10 +69,10 @@ public:
     size_t linkCounter = 0;
     size_t linkDistance = 0;
 
-    Troon *troonAtPlatform = new Troon();
-    Troon *troonAtLink = new Troon();
+    Troon *troonAtPlatform = nullptr;
+    Troon *troonAtLink = nullptr;
 
-    priority_queue<Troon *, std::deque<Troon *>, TroonComparison> *waitingArea = new priority_queue<Troon *, std::deque<Troon *>, TroonComparison>();
+    priority_queue<Troon *, std::deque<Troon *>, TroonComparison> waitingArea;
 };
 
 void convertStationNamesToId(const vector<string> &station_names, vector<size_t> &station_id);
@@ -94,10 +103,9 @@ void processWaitPlatform(dynamicLinkState *dstate);
 
 string generateTroonDescription(const Troon &t);
 
-void spawnTroons(vector<dynamicLinkState *> &graphStateDynamic, size_t num_green_trains, size_t num_yellow_trains,
-                 size_t num_blue_trains, size_t t);
+void spawnTroons(size_t num_green_trains, size_t num_yellow_trains, size_t num_blue_trains, size_t t);
 
-void printTroons(vector<dynamicLinkState *> &graphStateDynamic, size_t ticks, size_t num_lines, size_t t);
+void printTroons(size_t ticks, size_t num_lines, size_t t);
 
 // mapping
 map<string, uint32_t> stationNameIdMapping;
@@ -106,6 +114,8 @@ vector<string> stationIdNameMapping;
 // link states
 size_t graphCounter = 0;
 vector<staticLinkState> graphState;
+vector<dynamicLinkState *> graphStateDynamic; // to be initialized in each node
+
 size_t terminalGreenForward;
 size_t terminalGreenReverse;
 size_t terminalYellowForward;
@@ -161,51 +171,39 @@ void simulate(
 #endif
 
     // initialize per node
-    vector<dynamicLinkState *> graphStateDynamic(graphState.size()); // to be initialized in each node
-
     for (size_t i = 0; i < graphState.size(); i++) {
         auto *d = new dynamicLinkState();
         d->state = graphState[i];
 
-        graphStateDynamic[i] = d;
+        graphStateDynamic.push_back(d);
     }
 
     for (size_t t = 0; t < ticks; t++) {
-//        for (size_t i = 0; i < graphStateDynamic.size(); i++) {
-//            processLink(graphStateDynamic[i], t);
-//            processPushPlatform(graphStateDynamic[i]);
-//        }
+        // for each node
+        for (auto c: graphStateDynamic) {
+            processLink(c, t);
+            processPushPlatform(c);
+        }
 
         // master only
-        spawnTroons(graphStateDynamic, num_green_trains, num_yellow_trains, num_blue_trains, t);
-        cout << "testing manual: " << graphStateDynamic[terminalGreenForward]->waitingArea->top()->id << endl;
-        printf("Address of x is %p\n", (void *) graphStateDynamic[terminalGreenForward]->waitingArea);
-        printf("Address of x is %p\n", (void *) graphStateDynamic[terminalGreenForward]->waitingArea->top());
+        spawnTroons(num_green_trains, num_yellow_trains, num_blue_trains, t);
 
-        cout << "testing manual: " << graphStateDynamic[terminalGreenReverse]->waitingArea->top()->id << endl;
-        printf("Address of y is %p\n", (void *) graphStateDynamic[terminalGreenReverse]->waitingArea);
-        printf("Address of y is %p\n", (void *) graphStateDynamic[terminalGreenReverse]->waitingArea->top());
-        cout << "testing manual: " << graphStateDynamic[terminalYellowForward]->waitingArea->top()->id << endl;
-        cout << "testing manual: " << graphStateDynamic[terminalYellowReverse]->waitingArea->top()->id << endl;
-        cout << "testing manual: " << graphStateDynamic[terminalBlueForward]->waitingArea->top()->id << endl;
-        cout << "testing manual: " << graphStateDynamic[terminalBlueReverse]->waitingArea->top()->id << endl;
-
+        // for each node
         for (auto c: graphStateDynamic) {
-            // per node in OpenMPI
             processWaitingArea(c);
             processWaitPlatform(c);
         }
 
         // master only
-        printTroons(graphStateDynamic, ticks, num_lines, t);
+        printTroons(ticks, num_lines, t);
     }
 }
 
-void printTroons(vector<dynamicLinkState *> &graphStateDynamic, size_t ticks, size_t num_lines, size_t t) {
+void printTroons(size_t ticks, size_t num_lines, size_t t) {
     set<Troon *, TroonLexicographyComparison> troons;
 
     // TODO: Collect all the troons from all the nodes
-    for (auto &c: graphStateDynamic) {
+    for (auto c: graphStateDynamic) {
         if (c->troonAtLink != nullptr) {
             troons.insert(c->troonAtLink);
         }
@@ -214,16 +212,15 @@ void printTroons(vector<dynamicLinkState *> &graphStateDynamic, size_t ticks, si
             troons.insert(c->troonAtPlatform);
         }
 
-        auto *new_pq = new priority_queue<Troon *, std::deque<Troon *>, TroonComparison>();
+        priority_queue<Troon *, std::deque<Troon *>, TroonComparison> new_pq;
 
-        while (!c->waitingArea->empty()) {
-            Troon *troon = c->waitingArea->top();
-            new_pq->push(troon);
+        while (!c->waitingArea.empty()) {
+            Troon *troon = c->waitingArea.top();
+            new_pq.push(troon);
             troons.insert(troon);
-            c->waitingArea->pop();
+            c->waitingArea.pop();
         }
 
-        delete c->waitingArea;
         c->waitingArea = new_pq;
     }
 
@@ -238,114 +235,101 @@ void printTroons(vector<dynamicLinkState *> &graphStateDynamic, size_t ticks, si
     }
 }
 
-void spawnTroons(vector<dynamicLinkState *> &graphStateDynamic, size_t num_green_trains, size_t num_yellow_trains,
+void spawnTroons(size_t num_green_trains, size_t num_yellow_trains,
                  size_t num_blue_trains, size_t t) {
     // TODO: Send these troons to other nodes
     if (greenTroonCounter < num_green_trains) {
-        Troon *troon = new Troon{
+        auto *troon = new Troon{
                 t,
-                troonIdCounter++,
+                troonIdCounter,
                 graphStateDynamic[terminalGreenForward]->state.srcId,
                 graphStateDynamic[terminalGreenForward]->state.destId,
                 WAITING_AREA,
                 GREEN
         };
 
-        graphStateDynamic[terminalGreenForward]->waitingArea->push(troon);
+        graphStateDynamic[terminalGreenForward]->waitingArea.push(troon);
         greenTroonCounter++;
+        troonIdCounter++;
     }
-    printf("Address of x is %p\n", (void *) graphStateDynamic[terminalGreenForward]->waitingArea);
-    printf("Address of x is %p\n", (void *) graphStateDynamic[terminalGreenForward]->waitingArea->top());
-
-    cout << "testing manual: " << graphStateDynamic[terminalGreenForward]->waitingArea->top()->id << endl;
 
     if (greenTroonCounter < num_green_trains) {
-        Troon *troon = new Troon{
+        auto *troon = new Troon{
                 t,
-                troonIdCounter++,
+                troonIdCounter,
                 graphStateDynamic[terminalGreenReverse]->state.srcId,
                 graphStateDynamic[terminalGreenReverse]->state.destId,
                 WAITING_AREA,
                 GREEN
         };
 
-        graphStateDynamic[terminalGreenReverse]->waitingArea->push(troon);
+        graphStateDynamic[terminalGreenReverse]->waitingArea.push(troon);
         greenTroonCounter++;
+        troonIdCounter++;
     }
-
-    printf("Address of y is %p\n", (void *) graphStateDynamic[terminalGreenReverse]->waitingArea);
-    printf("Address of y is %p\n", (void *) graphStateDynamic[terminalGreenReverse]->waitingArea->top());
-
-    cout << "testing manual: " << graphStateDynamic[terminalGreenReverse]->waitingArea->top()->id << endl;
 
     if (yellowTroonCounter < num_yellow_trains) {
         auto *troon = new Troon{
                 t,
-                troonIdCounter++,
+                troonIdCounter,
                 graphStateDynamic[terminalYellowForward]->state.srcId,
                 graphStateDynamic[terminalYellowForward]->state.destId,
                 WAITING_AREA,
                 YELLOW
         };
 
-        graphStateDynamic[terminalYellowForward]->waitingArea->push(troon);
+        graphStateDynamic[terminalYellowForward]->waitingArea.push(troon);
         yellowTroonCounter++;
+        troonIdCounter++;
     }
-
-    cout << "testing manual: " << graphStateDynamic[terminalYellowForward]->waitingArea->top()->id << endl;
 
     if (yellowTroonCounter < num_yellow_trains) {
         auto *troon = new Troon{
                 t,
-                troonIdCounter++,
+                troonIdCounter,
                 graphStateDynamic[terminalYellowReverse]->state.srcId,
                 graphStateDynamic[terminalYellowReverse]->state.destId,
                 WAITING_AREA,
                 YELLOW
         };
 
-        graphStateDynamic[terminalYellowReverse]->waitingArea->push(troon);
+        graphStateDynamic[terminalYellowReverse]->waitingArea.push(troon);
         yellowTroonCounter++;
+        troonIdCounter++;
     }
-
-    cout << "testing manual: " << graphStateDynamic[terminalYellowReverse]->waitingArea->top()->id << endl;
 
     if (blueTroonCounter < num_blue_trains) {
         auto *troon = new Troon{
                 t,
-                troonIdCounter++,
+                troonIdCounter,
                 graphStateDynamic[terminalBlueForward]->state.srcId,
                 graphStateDynamic[terminalBlueForward]->state.destId,
                 WAITING_AREA,
                 BLUE
         };
 
-        graphStateDynamic[terminalBlueForward]->waitingArea->push(troon);
+        graphStateDynamic[terminalBlueForward]->waitingArea.push(troon);
         blueTroonCounter++;
+        troonIdCounter++;
     }
-
-    cout << "testing manual: " << graphStateDynamic[terminalBlueForward]->waitingArea->top()->id << endl;
 
     if (blueTroonCounter < num_blue_trains) {
         auto *troon = new Troon{
                 t,
-                troonIdCounter++,
+                troonIdCounter,
                 graphStateDynamic[terminalBlueReverse]->state.srcId,
                 graphStateDynamic[terminalBlueReverse]->state.destId,
                 WAITING_AREA,
                 BLUE
         };
 
-        graphStateDynamic[terminalBlueReverse]->waitingArea->push(troon);
+        graphStateDynamic[terminalBlueReverse]->waitingArea.push(troon);
         blueTroonCounter++;
+        troonIdCounter++;
     }
-
-    cout << "testing manual: " << graphStateDynamic[terminalBlueReverse]->waitingArea->top()->id << endl << endl;
-    printf("Address of x is %p\n", (void *) graphStateDynamic[terminalGreenReverse]->waitingArea);
-    printf("Address of x is %p\n", (void *) graphStateDynamic[terminalGreenReverse]->waitingArea->top());
 }
 
-void processLink(vector<dynamicLinkState *> &graphStateDynamic, dynamicLinkState *dstate, size_t tick) {
+void processLink(dynamicLinkState *dstate, size_t tick) {
     if (dstate->troonAtLink == nullptr) {
         dstate->linkCounter++;
         return;
@@ -361,17 +345,17 @@ void processLink(vector<dynamicLinkState *> &graphStateDynamic, dynamicLinkState
             case GREEN: // G
                 currTroon->src = graphStateDynamic[dstate->state.nextLinkGreen]->state.srcId;
                 currTroon->dest = graphStateDynamic[dstate->state.nextLinkGreen]->state.destId;
-                graphStateDynamic[dstate->state.nextLinkGreen]->waitingArea->push(currTroon);
+                graphStateDynamic[dstate->state.nextLinkGreen]->waitingArea.push(currTroon);
                 break;
             case YELLOW: // Y
                 currTroon->src = graphStateDynamic[dstate->state.nextLinkYellow]->state.srcId;
                 currTroon->dest = graphStateDynamic[dstate->state.nextLinkYellow]->state.destId;
-                graphStateDynamic[dstate->state.nextLinkYellow]->waitingArea->push(currTroon);
+                graphStateDynamic[dstate->state.nextLinkYellow]->waitingArea.push(currTroon);
                 break;
             case BLUE: // B
                 currTroon->src = graphStateDynamic[dstate->state.nextLinkBlue]->state.srcId;
                 currTroon->dest = graphStateDynamic[dstate->state.nextLinkBlue]->state.destId;
-                graphStateDynamic[dstate->state.nextLinkBlue]->waitingArea->push(currTroon);
+                graphStateDynamic[dstate->state.nextLinkBlue]->waitingArea.push(currTroon);
                 break;
 
         }
@@ -402,14 +386,14 @@ void processPushPlatform(dynamicLinkState *dstate) {
 
 void processWaitingArea(dynamicLinkState *dstate) {
     bool hasTroonAtPlatform = dstate->troonAtPlatform != nullptr;
-    if (dstate->waitingArea->empty() || hasTroonAtPlatform) {
+    if (dstate->waitingArea.empty() || hasTroonAtPlatform) {
         return;
     }
 
-    Troon *troon = dstate->waitingArea->top();
+    Troon *troon = dstate->waitingArea.top();
     troon->location = PLATFORM;
     dstate->troonAtPlatform = troon;
-    dstate->waitingArea->pop();
+    dstate->waitingArea.pop();
 }
 
 void processWaitPlatform(dynamicLinkState *dstate) {
@@ -534,7 +518,7 @@ void assembleBlueLine(const vector<size_t> &blue_station_id, map<pair<size_t, si
             nextLink = tempLinkMapping[std::make_pair(nextStation, nextTwoStation)];
         }
 
-        graphState[currentLink].nextLinkYellow = nextLink;
+        graphState[currentLink].nextLinkBlue = nextLink;
     }
 }
 
