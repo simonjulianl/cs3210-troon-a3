@@ -1,3 +1,5 @@
+#include <mpi.h>
+#include <unistd.h>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -6,10 +8,14 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
+#include <stdint.h>
+#include <limits.h>
+#include <stddef.h>
+#include <stdio.h>
 
 using namespace std;
 
-using adjacency_matrix = std::vector<std::vector<size_t>>;
+using adjacency_matrix = std::vector <std::vector<size_t>>;
 
 #define WAITING_AREA 0
 #define PLATFORM 1
@@ -19,6 +25,30 @@ using adjacency_matrix = std::vector<std::vector<size_t>>;
 #define YELLOW 1
 #define BLUE 2
 
+// MPI States
+int nprocs; // all processes are equal here
+int myid;
+char hostname[256];
+int linksPerNode;
+
+#define ORIGINAL_PROC 0
+
+#if SIZE_MAX == UCHAR_MAX
+#define MPI_SIZE_T MPI_UNSIGNED_CHAR
+#elif SIZE_MAX == USHRT_MAX
+#define MPI_SIZE_T MPI_UNSIGNED_SHORT
+#elif SIZE_MAX == UINT_MAX
+#define MPI_SIZE_T MPI_UNSIGNED
+#elif SIZE_MAX == ULONG_MAX
+#define MPI_SIZE_T MPI_UNSIGNED_LONG
+#elif SIZE_MAX == ULLONG_MAX
+#define MPI_SIZE_T MPI_UNSIGNED_LONG_LONG
+#else
+#error "Unknown size_t"
+#endif
+
+#define TROON_ITEMS 6
+MPI_Datatype mpi_troon_type;
 struct Troon {
     size_t arrivalTime = 0;
     size_t id = 0;
@@ -26,17 +56,10 @@ struct Troon {
     size_t dest = 0;
     size_t location = 0;
     size_t line = 0;
-
-    explicit Troon(
-            size_t arrivalTime,
-            size_t id,
-            size_t src,
-            size_t dest,
-            size_t location,
-            size_t line
-    ) : arrivalTime{arrivalTime}, id{id}, src{src}, dest{dest}, location{location}, line{line} {};
 };
 
+#define STATIC_LINK_STATE_ITEMS 8
+MPI_Datatype mpi_static_link_state_type;
 struct staticLinkState {
     size_t popularity = 0;
     size_t distance = 0;
@@ -72,26 +95,27 @@ public:
     Troon *troonAtPlatform = nullptr;
     Troon *troonAtLink = nullptr;
 
-    priority_queue<Troon *, std::deque<Troon *>, TroonComparison> waitingArea;
+    priority_queue<Troon *, std::deque < Troon * >, TroonComparison>
+    waitingArea;
 };
 
-void convertStationNamesToId(const vector<string> &station_names, vector<size_t> &station_id);
+void convertStationNamesToId(const vector <string> &station_names, vector <size_t> &station_id);
 
-void populateStaticData(const vector<size_t> &popularities, const adjacency_matrix &mat,
-                        const vector<size_t> &station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping);
+void populateStaticData(const vector <size_t> &popularities, const adjacency_matrix &mat,
+                        const vector <size_t> &station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping);
 
-void assembleGreenLine(const vector<size_t> &green_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleGreenLine(const vector <size_t> &green_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
                        bool isReverse);
 
-void assembleYellowLine(const vector<size_t> &yellow_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleYellowLine(const vector <size_t> &yellow_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
                         bool isReverse);
 
-void assembleBlueLine(const vector<size_t> &blue_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleBlueLine(const vector <size_t> &blue_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
                       bool isReverse);
 
-void initialization(size_t num_stations, const vector<string> &station_names, const vector<size_t> &popularities,
-                    const vector<string> &green_station_names, const vector<string> &yellow_station_names,
-                    const vector<string> &blue_station_names, const adjacency_matrix &mat);
+void initialization(size_t num_stations, const vector <string> &station_names, const vector <size_t> &popularities,
+                    const vector <string> &green_station_names, const vector <string> &yellow_station_names,
+                    const vector <string> &blue_station_names, const adjacency_matrix &mat);
 
 void processLink(dynamicLinkState *dstate, size_t tick);
 
@@ -110,13 +134,14 @@ void printTroons(size_t ticks, size_t num_lines, size_t t);
 void clean();
 
 // mapping
-map<string, uint32_t> stationNameIdMapping;
-vector<string> stationIdNameMapping;
+map <string, uint32_t> stationNameIdMapping;
+vector <string> stationIdNameMapping;
 
 // link states
 size_t graphCounter = 0;
-vector<staticLinkState> graphState;
+vector <staticLinkState> graphState;
 vector<dynamicLinkState *> graphStateDynamic; // to be initialized in each node
+staticLinkState *graphStatePerNode;
 
 size_t terminalGreenForward;
 size_t terminalGreenReverse;
@@ -139,12 +164,12 @@ struct TroonLexicographyComparison {
 
 void simulate(
         size_t num_stations,
-        const vector<string> &station_names,
-        const std::vector<size_t> &popularities,
+        const vector <string> &station_names,
+        const std::vector <size_t> &popularities,
         const adjacency_matrix &mat,
-        const vector<string> &green_station_names,
-        const vector<string> &yellow_station_names,
-        const vector<string> &blue_station_names, size_t ticks,
+        const vector <string> &green_station_names,
+        const vector <string> &yellow_station_names,
+        const vector <string> &blue_station_names, size_t ticks,
         size_t num_green_trains, size_t num_yellow_trains,
         size_t num_blue_trains, size_t num_lines,
         int argc,
@@ -172,33 +197,95 @@ void simulate(
     cout << terminalBlueForward << " " << terminalBlueReverse << endl;
 #endif
 
+    MPI_Init(&argc, &argv);
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+
+    if (myid == ORIGINAL_PROC) {
+        while (graphState.size() % nprocs != 0) {
+            staticLinkState s = {};
+            graphState.push_back(s); // add dummy state, so we can use symmetrical operations later
+        }
+    }
+
+    int sc_status = gethostname(hostname, sizeof(hostname) - 1);
+    if (sc_status) {
+        perror("gethostname fails");
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+
+    int troon_blocklengths[TROON_ITEMS] = {1, 1, 1, 1, 1, 1};
+    MPI_Datatype troon_types[TROON_ITEMS] = {MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T};
+    MPI_Aint troon_offsets[TROON_ITEMS];
+
+    troon_offsets[0] = offsetof(Troon, arrivalTime);
+    troon_offsets[1] = offsetof(Troon, id);
+    troon_offsets[2] = offsetof(Troon, src);
+    troon_offsets[3] = offsetof(Troon, dest);
+    troon_offsets[4] = offsetof(Troon, location);
+    troon_offsets[5] = offsetof(Troon, line);
+
+    MPI_Type_create_struct(TROON_ITEMS, troon_blocklengths, troon_offsets, troon_types, &mpi_troon_type);
+    MPI_Type_commit(&mpi_troon_type);
+
+    int staticlinkstate_blocklengths[STATIC_LINK_STATE_ITEMS] = {1, 1, 1, 1, 1, 1, 1, 1};
+    MPI_Datatype staticlinkstate_types[STATIC_LINK_STATE_ITEMS] = {MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T,
+                                                                   MPI_SIZE_T,
+                                                                   MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T};
+    MPI_Aint staticlinkstate_offsets[STATIC_LINK_STATE_ITEMS];
+
+    staticlinkstate_offsets[0] = offsetof(staticLinkState, popularity);
+    staticlinkstate_offsets[1] = offsetof(staticLinkState, distance);
+    staticlinkstate_offsets[2] = offsetof(staticLinkState, nextLinkGreen);
+    staticlinkstate_offsets[3] = offsetof(staticLinkState, nextLinkYellow);
+    staticlinkstate_offsets[4] = offsetof(staticLinkState, nextLinkBlue);
+    staticlinkstate_offsets[5] = offsetof(staticLinkState, srcId);
+    staticlinkstate_offsets[6] = offsetof(staticLinkState, destId);
+    staticlinkstate_offsets[7] = offsetof(staticLinkState, id);
+
+    MPI_Type_create_struct(TROON_ITEMS, staticlinkstate_blocklengths, staticlinkstate_offsets,
+                           staticlinkstate_types, &mpi_static_link_state_type);
+    MPI_Type_commit(&mpi_static_link_state_type);
+
+    if (myid == ORIGINAL_PROC) {
+        cout << "I am the original" << endl;
+        cout << graphState[0].destId;
+    } else {
+        cout << "I am the fake" << endl;
+        cout << graphState[0].destId;
+
+    }
+
+    MPI_Finalize();
+
+
     // initialize per node
-    for (size_t i = 0; i < graphState.size(); i++) {
-        auto *d = new dynamicLinkState();
-        d->state = graphState[i];
+//    for (size_t i = 0; i < graphState.size(); i++) {
+//        auto *d = new dynamicLinkState();
+//        d->state = graphState[i];
+//
+//        graphStateDynamic.push_back(d);
+//    }
 
-        graphStateDynamic.push_back(d);
-    }
-
-    for (size_t t = 0; t < ticks; t++) {
-        // for each node
-        for (auto c: graphStateDynamic) {
-            processLink(c, t);
-            processPushPlatform(c);
-        }
-
-        // master only
-        spawnTroons(num_green_trains, num_yellow_trains, num_blue_trains, t);
-
-        // for each node
-        for (auto c: graphStateDynamic) {
-            processWaitingArea(c);
-            processWaitPlatform(c);
-        }
-
-        // master only
-        printTroons(ticks, num_lines, t);
-    }
+//    for (size_t t = 0; t < ticks; t++) {
+//        // for each node
+//        for (auto c: graphStateDynamic) {
+//            processLink(c, t);
+//            processPushPlatform(c);
+//        }
+//
+//        // master only
+//        spawnTroons(num_green_trains, num_yellow_trains, num_blue_trains, t);
+//
+//        // for each node
+//        for (auto c: graphStateDynamic) {
+//            processWaitingArea(c);
+//            processWaitPlatform(c);
+//        }
+//
+//        // master only
+//        printTroons(ticks, num_lines, t);
+//    }
 
     // for each node
     clean();
@@ -220,7 +307,7 @@ void clean() {
 }
 
 void printTroons(size_t ticks, size_t num_lines, size_t t) {
-    set<Troon *, TroonLexicographyComparison> troons;
+    set < Troon * , TroonLexicographyComparison > troons;
 
     // TODO: Collect all the troons from all the nodes
     for (auto c: graphStateDynamic) {
@@ -232,7 +319,7 @@ void printTroons(size_t ticks, size_t num_lines, size_t t) {
             troons.insert(c->troonAtPlatform);
         }
 
-        priority_queue<Troon *, std::deque<Troon *>, TroonComparison> new_pq;
+        priority_queue < Troon * , std::deque < Troon * >, TroonComparison > new_pq;
 
         while (!c->waitingArea.empty()) {
             Troon *troon = c->waitingArea.top();
@@ -422,24 +509,24 @@ void processWaitPlatform(dynamicLinkState *dstate) {
     }
 }
 
-void initialization(size_t num_stations, const vector<string> &station_names, const vector<size_t> &popularities,
-                    const vector<string> &green_station_names, const vector<string> &yellow_station_names,
-                    const vector<string> &blue_station_names, const adjacency_matrix &mat) {// Create station mapping
+void initialization(size_t num_stations, const vector <string> &station_names, const vector <size_t> &popularities,
+                    const vector <string> &green_station_names, const vector <string> &yellow_station_names,
+                    const vector <string> &blue_station_names, const adjacency_matrix &mat) {// Create station mapping
     for (size_t i = 0; i < num_stations; i++) {
         const string &stationName = station_names[i];
         stationNameIdMapping[stationName] = i;
         stationIdNameMapping.push_back(stationName);
     }
 
-    std::vector<size_t> green_station_id;
-    std::vector<size_t> yellow_station_id;
-    std::vector<size_t> blue_station_id;
+    std::vector <size_t> green_station_id;
+    std::vector <size_t> yellow_station_id;
+    std::vector <size_t> blue_station_id;
 
     convertStationNamesToId(green_station_names, green_station_id);
     convertStationNamesToId(yellow_station_names, yellow_station_id);
     convertStationNamesToId(blue_station_names, blue_station_id);
 
-    std::map<std::pair<size_t, size_t>, size_t> tempLinkMapping;
+    std::map <std::pair<size_t, size_t>, size_t> tempLinkMapping;
     // initialize static link mapping
     // populate line green forward direction
     populateStaticData(popularities, mat, green_station_id, tempLinkMapping);
@@ -470,7 +557,7 @@ void initialization(size_t num_stations, const vector<string> &station_names, co
     assembleBlueLine(blue_station_id, tempLinkMapping, false);
 }
 
-void assembleGreenLine(const vector<size_t> &green_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleGreenLine(const vector <size_t> &green_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
                        bool isReverse) {
     size_t currentLink, nextLink, nextTwoStation;
     for (size_t i = 0; i < green_station_id.size() - 1; i++) {
@@ -494,7 +581,7 @@ void assembleGreenLine(const vector<size_t> &green_station_id, map<pair<size_t, 
     }
 }
 
-void assembleYellowLine(const vector<size_t> &yellow_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleYellowLine(const vector <size_t> &yellow_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
                         bool isReverse) {
     size_t currentLink, nextLink, nextTwoStation;
     for (size_t i = 0; i < yellow_station_id.size() - 1; i++) {
@@ -518,7 +605,7 @@ void assembleYellowLine(const vector<size_t> &yellow_station_id, map<pair<size_t
     }
 }
 
-void assembleBlueLine(const vector<size_t> &blue_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleBlueLine(const vector <size_t> &blue_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
                       bool isReverse) {
     size_t currentLink, nextLink, nextTwoStation;
     for (size_t i = 0; i < blue_station_id.size() - 1; i++) {
@@ -543,10 +630,10 @@ void assembleBlueLine(const vector<size_t> &blue_station_id, map<pair<size_t, si
 }
 
 void populateStaticData(
-        const vector<size_t> &popularities,
+        const vector <size_t> &popularities,
         const adjacency_matrix &mat,
-        const vector<size_t> &station_id,
-        map<pair<size_t, size_t>, size_t> &tempLinkMapping
+        const vector <size_t> &station_id,
+        map <pair<size_t, size_t>, size_t> &tempLinkMapping
 ) {
     for (size_t i = 0; i < station_id.size() - 1; i++) {
         size_t currentStation = station_id[i];
@@ -566,7 +653,7 @@ void populateStaticData(
     }
 }
 
-void convertStationNamesToId(const vector<string> &station_names, vector<size_t> &station_id) {
+void convertStationNamesToId(const vector <string> &station_names, vector <size_t> &station_id) {
     for (const auto &green_station_name: station_names) {
         station_id.push_back(stationNameIdMapping[green_station_name]);
     }
@@ -605,9 +692,9 @@ string generateTroonDescription(const Troon &t) {
     return currentLine + std::to_string(t.id) + "-" + currentLocation;
 }
 
-vector<string> extract_station_names(string &line) {
+vector <string> extract_station_names(string &line) {
     constexpr char space_delimiter = ' ';
-    vector<string> stations{};
+    vector <string> stations{};
     line += ' ';
     size_t pos;
     while ((pos = line.find(space_delimiter)) != string::npos) {
@@ -637,7 +724,7 @@ int main(int argc, char **argv) {
 
     // Read station names.
     string station;
-    std::vector<string> station_names{};
+    std::vector <string> station_names{};
     station_names.reserve(S);
     for (size_t i = 0; i < S; ++i) {
         ifs >> station;
@@ -646,7 +733,7 @@ int main(int argc, char **argv) {
 
     // Read P popularity
     size_t p;
-    std::vector<size_t> popularities{};
+    std::vector <size_t> popularities{};
     popularities.reserve(S);
     for (size_t i = 0; i < S; ++i) {
         ifs >> p;
