@@ -312,6 +312,8 @@ void exchangeTroons() {
             graphStateDynamic[desiredLink]->waitingArea.push(t);
         }
     }
+
+    delete[] troons_recv_buffer;
 }
 
 void createMpiTroonType() {
