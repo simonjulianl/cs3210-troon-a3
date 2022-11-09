@@ -8,14 +8,13 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
-#include <stdint.h>
-#include <limits.h>
-#include <stddef.h>
-#include <stdio.h>
+#include <cstdint>
+#include <climits>
+#include <cstddef>
 
 using namespace std;
 
-using adjacency_matrix = std::vector <std::vector<size_t>>;
+using adjacency_matrix = std::vector<std::vector<size_t>>;
 
 #define WAITING_AREA 0
 #define PLATFORM 1
@@ -47,7 +46,7 @@ int linksPerNode;
 #error "Unknown size_t"
 #endif
 
-#define TROON_ITEMS 6
+#define TROON_ITEMS 7
 MPI_Datatype mpi_troon_type;
 struct Troon {
     size_t arrivalTime = 0;
@@ -56,10 +55,9 @@ struct Troon {
     size_t dest = 0;
     size_t location = 0;
     size_t line = 0;
+    size_t currentLink = 0;
 };
 
-#define STATIC_LINK_STATE_ITEMS 8
-MPI_Datatype mpi_static_link_state_type;
 struct staticLinkState {
     size_t popularity = 0;
     size_t distance = 0;
@@ -95,27 +93,27 @@ public:
     Troon *troonAtPlatform = nullptr;
     Troon *troonAtLink = nullptr;
 
-    priority_queue<Troon *, std::deque < Troon * >, TroonComparison>
-    waitingArea;
+    priority_queue<Troon *, std::deque<Troon *>, TroonComparison>
+            waitingArea;
 };
 
-void convertStationNamesToId(const vector <string> &station_names, vector <size_t> &station_id);
+void convertStationNamesToId(const vector<string> &station_names, vector<size_t> &station_id);
 
-void populateStaticData(const vector <size_t> &popularities, const adjacency_matrix &mat,
-                        const vector <size_t> &station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping);
+void populateStaticData(const vector<size_t> &popularities, const adjacency_matrix &mat,
+                        const vector<size_t> &station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping);
 
-void assembleGreenLine(const vector <size_t> &green_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleGreenLine(const vector<size_t> &green_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
                        bool isReverse);
 
-void assembleYellowLine(const vector <size_t> &yellow_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleYellowLine(const vector<size_t> &yellow_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
                         bool isReverse);
 
-void assembleBlueLine(const vector <size_t> &blue_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleBlueLine(const vector<size_t> &blue_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
                       bool isReverse);
 
-void initialization(size_t num_stations, const vector <string> &station_names, const vector <size_t> &popularities,
-                    const vector <string> &green_station_names, const vector <string> &yellow_station_names,
-                    const vector <string> &blue_station_names, const adjacency_matrix &mat);
+void initialization(size_t num_stations, const vector<string> &station_names, const vector<size_t> &popularities,
+                    const vector<string> &green_station_names, const vector<string> &yellow_station_names,
+                    const vector<string> &blue_station_names, const adjacency_matrix &mat);
 
 void processLink(dynamicLinkState *dstate, size_t tick);
 
@@ -133,15 +131,18 @@ void printTroons(size_t ticks, size_t num_lines, size_t t);
 
 void clean();
 
+void createMpiTroonType();
+
+void exchangeTroons();
+
 // mapping
-map <string, uint32_t> stationNameIdMapping;
-vector <string> stationIdNameMapping;
+map<string, uint32_t> stationNameIdMapping;
+vector<string> stationIdNameMapping;
 
 // link states
 size_t graphCounter = 0;
-vector <staticLinkState> graphState;
+vector<staticLinkState> graphState;
 vector<dynamicLinkState *> graphStateDynamic; // to be initialized in each node
-staticLinkState *graphStatePerNode;
 
 size_t terminalGreenForward;
 size_t terminalGreenReverse;
@@ -162,14 +163,21 @@ struct TroonLexicographyComparison {
     }
 };
 
+// comm state
+int startLink, endLink;
+vector<vector<Troon>> troons_buffer_to_send;
+int *troons_counter;
+int *troons_counter_recv_buffer;
+MPI_Request *req;
+
 void simulate(
         size_t num_stations,
-        const vector <string> &station_names,
-        const std::vector <size_t> &popularities,
+        const vector<string> &station_names,
+        const std::vector<size_t> &popularities,
         const adjacency_matrix &mat,
-        const vector <string> &green_station_names,
-        const vector <string> &yellow_station_names,
-        const vector <string> &blue_station_names, size_t ticks,
+        const vector<string> &green_station_names,
+        const vector<string> &yellow_station_names,
+        const vector<string> &blue_station_names, size_t ticks,
         size_t num_green_trains, size_t num_yellow_trains,
         size_t num_blue_trains, size_t num_lines,
         int argc,
@@ -201,11 +209,14 @@ void simulate(
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     MPI_Comm_rank(MPI_COMM_WORLD, &myid);
 
-    if (myid == ORIGINAL_PROC) {
-        while (graphState.size() % nprocs != 0) {
-            staticLinkState s = {};
-            graphState.push_back(s); // add dummy state, so we can use symmetrical operations later
-        }
+    troons_counter_recv_buffer = new int[nprocs];
+    troons_counter = new int[nprocs];
+    req = new MPI_Request[nprocs * 2];
+
+    troons_buffer_to_send.reserve(nprocs);
+    for (int i = 0; i < nprocs; i++) {
+        vector<Troon> b;
+        troons_buffer_to_send.push_back(b);
     }
 
     int sc_status = gethostname(hostname, sizeof(hostname) - 1);
@@ -214,8 +225,99 @@ void simulate(
         MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
     }
 
-    int troon_blocklengths[TROON_ITEMS] = {1, 1, 1, 1, 1, 1};
-    MPI_Datatype troon_types[TROON_ITEMS] = {MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T};
+    createMpiTroonType();
+
+    // initialize per node
+    for (size_t i = 0; i < graphState.size(); i++) {
+        auto *d = new dynamicLinkState();
+        d->state = graphState[i];
+
+        graphStateDynamic.push_back(d);
+    }
+
+    linksPerNode = (static_cast<int>(graphState.size()) + nprocs - 1) / nprocs;
+
+    for (size_t t = 0; t < ticks; t++) {
+        // for each node
+        startLink = myid * linksPerNode;
+        endLink = min(static_cast<int>(graphStateDynamic.size()), (myid + 1) * linksPerNode);
+
+        for (int i = startLink; i < endLink; i++) {
+            processLink(graphStateDynamic[i], t);
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        exchangeTroons();
+
+        for (int i = startLink; i < endLink; i++) {
+            processPushPlatform(graphStateDynamic[i]);
+        }
+
+        spawnTroons(num_green_trains, num_yellow_trains, num_blue_trains, t);
+
+        // for each node
+        for (int i = startLink; i < endLink; i++) {
+            processWaitingArea(graphStateDynamic[i]);
+            processWaitPlatform(graphStateDynamic[i]);
+        }
+
+        // master only
+        MPI_Barrier(MPI_COMM_WORLD);
+        printTroons(ticks, num_lines, t);
+    }
+
+    // for each node
+    clean();
+
+    MPI_Finalize();
+}
+
+void exchangeTroons() {
+    for (int j = 0; j < nprocs; j++) {
+        troons_counter[j] = static_cast<int>(troons_buffer_to_send[j].size());
+    }
+
+    MPI_Alltoall(troons_counter, 1, MPI_INT, troons_counter_recv_buffer, 1, MPI_INT, MPI_COMM_WORLD);
+#ifdef DEBUG
+    for (int j = 0; j < nprocs; j++) {
+        cout << myid << " from " << j << " : " << troons_counter_recv_buffer[j] << endl;
+    }
+#endif
+
+    auto **troons_recv_buffer = new Troon *[nprocs];
+
+    for (int i = 0; i < nprocs; i++) {
+        int toSendSize = static_cast<int>(troons_buffer_to_send[i].size());
+        Troon *buffer_send = &troons_buffer_to_send[i][0];
+        MPI_Isend(buffer_send, toSendSize, mpi_troon_type, i, 0, MPI_COMM_WORLD, &req[i * 2]);
+
+        int toReceiveSize = troons_counter_recv_buffer[i];
+        auto troon_buffer = new Troon[toReceiveSize];
+        troons_recv_buffer[i] = troon_buffer;
+        MPI_Irecv(troon_buffer, toReceiveSize, mpi_troon_type, i, 0, MPI_COMM_WORLD, &req[i * 2 + 1]);
+    }
+
+    MPI_Waitall(nprocs * 2, req, MPI_STATUS_IGNORE);
+
+    // insert all the troons
+    size_t desiredLink;
+    for (int i = 0; i < nprocs; i++) {
+        if (i == myid) continue;
+        for (int j = 0; j < troons_counter_recv_buffer[i]; j++) {
+            Troon *t = &troons_recv_buffer[i][j];
+            desiredLink = t->currentLink;
+#ifdef DEBUG
+            cout << myid << " receive troon: " << generateTroonDescription(*t) << desiredLink << endl;
+#endif
+            graphStateDynamic[desiredLink]->waitingArea.push(t);
+        }
+    }
+}
+
+void createMpiTroonType() {
+    int troon_blocklengths[TROON_ITEMS] = {1, 1, 1, 1, 1, 1, 1};
+    MPI_Datatype troon_types[TROON_ITEMS] = {MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T,
+                                             MPI_SIZE_T};
     MPI_Aint troon_offsets[TROON_ITEMS];
 
     troon_offsets[0] = offsetof(Troon, arrivalTime);
@@ -224,71 +326,10 @@ void simulate(
     troon_offsets[3] = offsetof(Troon, dest);
     troon_offsets[4] = offsetof(Troon, location);
     troon_offsets[5] = offsetof(Troon, line);
+    troon_offsets[6] = offsetof(Troon, currentLink);
 
     MPI_Type_create_struct(TROON_ITEMS, troon_blocklengths, troon_offsets, troon_types, &mpi_troon_type);
     MPI_Type_commit(&mpi_troon_type);
-
-    int staticlinkstate_blocklengths[STATIC_LINK_STATE_ITEMS] = {1, 1, 1, 1, 1, 1, 1, 1};
-    MPI_Datatype staticlinkstate_types[STATIC_LINK_STATE_ITEMS] = {MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T,
-                                                                   MPI_SIZE_T,
-                                                                   MPI_SIZE_T, MPI_SIZE_T, MPI_SIZE_T};
-    MPI_Aint staticlinkstate_offsets[STATIC_LINK_STATE_ITEMS];
-
-    staticlinkstate_offsets[0] = offsetof(staticLinkState, popularity);
-    staticlinkstate_offsets[1] = offsetof(staticLinkState, distance);
-    staticlinkstate_offsets[2] = offsetof(staticLinkState, nextLinkGreen);
-    staticlinkstate_offsets[3] = offsetof(staticLinkState, nextLinkYellow);
-    staticlinkstate_offsets[4] = offsetof(staticLinkState, nextLinkBlue);
-    staticlinkstate_offsets[5] = offsetof(staticLinkState, srcId);
-    staticlinkstate_offsets[6] = offsetof(staticLinkState, destId);
-    staticlinkstate_offsets[7] = offsetof(staticLinkState, id);
-
-    MPI_Type_create_struct(TROON_ITEMS, staticlinkstate_blocklengths, staticlinkstate_offsets,
-                           staticlinkstate_types, &mpi_static_link_state_type);
-    MPI_Type_commit(&mpi_static_link_state_type);
-
-    if (myid == ORIGINAL_PROC) {
-        cout << "I am the original" << endl;
-        cout << graphState[0].destId;
-    } else {
-        cout << "I am the fake" << endl;
-        cout << graphState[0].destId;
-
-    }
-
-    MPI_Finalize();
-
-
-    // initialize per node
-//    for (size_t i = 0; i < graphState.size(); i++) {
-//        auto *d = new dynamicLinkState();
-//        d->state = graphState[i];
-//
-//        graphStateDynamic.push_back(d);
-//    }
-
-//    for (size_t t = 0; t < ticks; t++) {
-//        // for each node
-//        for (auto c: graphStateDynamic) {
-//            processLink(c, t);
-//            processPushPlatform(c);
-//        }
-//
-//        // master only
-//        spawnTroons(num_green_trains, num_yellow_trains, num_blue_trains, t);
-//
-//        // for each node
-//        for (auto c: graphStateDynamic) {
-//            processWaitingArea(c);
-//            processWaitPlatform(c);
-//        }
-//
-//        // master only
-//        printTroons(ticks, num_lines, t);
-//    }
-
-    // for each node
-    clean();
 }
 
 void clean() {
@@ -304,34 +345,74 @@ void clean() {
 
         delete c;
     }
+
+    delete[] troons_counter_recv_buffer;
+    delete[] troons_counter;
+    delete[] req;
 }
 
 void printTroons(size_t ticks, size_t num_lines, size_t t) {
-    set < Troon * , TroonLexicographyComparison > troons;
+    if (ticks - t > num_lines) return;
 
-    // TODO: Collect all the troons from all the nodes
-    for (auto c: graphStateDynamic) {
-        if (c->troonAtLink != nullptr) {
-            troons.insert(c->troonAtLink);
+    vector<Troon> troon_vector;
+
+    for (int i = startLink; i < endLink; i++) {
+        if (graphStateDynamic[i]->troonAtLink != nullptr) {
+            troon_vector.push_back(*graphStateDynamic[i]->troonAtLink);
         }
 
-        if (c->troonAtPlatform != nullptr) {
-            troons.insert(c->troonAtPlatform);
+        if (graphStateDynamic[i]->troonAtPlatform != nullptr) {
+            troon_vector.push_back(*graphStateDynamic[i]->troonAtPlatform);
         }
 
-        priority_queue < Troon * , std::deque < Troon * >, TroonComparison > new_pq;
+        priority_queue<Troon *, std::deque<Troon *>, TroonComparison> new_pq;
 
-        while (!c->waitingArea.empty()) {
-            Troon *troon = c->waitingArea.top();
+        while (!graphStateDynamic[i]->waitingArea.empty()) {
+            Troon *troon = graphStateDynamic[i]->waitingArea.top();
             new_pq.push(troon);
-            troons.insert(troon);
-            c->waitingArea.pop();
+            troon_vector.push_back(*troon);
+            graphStateDynamic[i]->waitingArea.pop();
         }
 
-        c->waitingArea = new_pq;
+        graphStateDynamic[i]->waitingArea = new_pq;
     }
 
-    if (ticks - t <= num_lines) {
+#ifdef DEBUG
+    stringstream ss;
+    ss << myid << " -> " << t << ": ";
+    for (auto &troon: troon_vector) {
+        ss << generateTroonDescription(troon);
+    }
+
+    cout << ss.str() << endl;
+    return;
+#endif
+
+    int troon_to_be_received = static_cast<int>(troon_vector.size());
+    if (myid == ORIGINAL_PROC) {
+        set<Troon *, TroonLexicographyComparison> troons;
+
+        int *troons_counters = new int[nprocs];
+        MPI_Gather(&troon_to_be_received, 1, MPI_INT, troons_counters, 1, MPI_INT, ORIGINAL_PROC, MPI_COMM_WORLD);
+
+        auto **troons_recv_buffer = new Troon *[nprocs];
+
+        for (int i = 0; i < nprocs; i++) {
+            if (i == ORIGINAL_PROC) continue;
+
+            auto troon_buffer = new Troon[troons_counters[i]];
+            troons_recv_buffer[i] = troon_buffer;
+
+            MPI_Recv(troon_buffer, troons_counters[i], mpi_troon_type, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            for (int j = 0; j < troons_counters[i]; j++) {
+                troons.insert(&troon_buffer[j]);
+            }
+        }
+
+        for (auto &c: troon_vector) {
+            troons.insert(&c);
+        }
+
         stringstream ss;
         ss << t << ": ";
         for (auto &troon: troons) {
@@ -339,98 +420,144 @@ void printTroons(size_t ticks, size_t num_lines, size_t t) {
         }
 
         cout << ss.str() << endl;
+
+        for (int i = 1; i < nprocs; i++) {
+            delete[] troons_recv_buffer[i];
+        }
+
+        delete[] troons_counters;
+        delete[] troons_recv_buffer;
+    } else {
+        MPI_Gather(&troon_to_be_received, 1, MPI_INT, NULL, 0, MPI_INT, ORIGINAL_PROC, MPI_COMM_WORLD);
+        MPI_Send(&troon_vector[0], troon_to_be_received, mpi_troon_type, 0, 0, MPI_COMM_WORLD);
     }
 }
 
 void spawnTroons(size_t num_green_trains, size_t num_yellow_trains,
                  size_t num_blue_trains, size_t t) {
-    // TODO: Send these troons to other nodes
-    if (greenTroonCounter < num_green_trains) {
-        auto *troon = new Troon{
-                t,
-                troonIdCounter,
-                graphStateDynamic[terminalGreenForward]->state.srcId,
-                graphStateDynamic[terminalGreenForward]->state.destId,
-                WAITING_AREA,
-                GREEN
-        };
+    bool isGreenMine =
+            startLink <= static_cast<int>(terminalGreenForward) && static_cast<int>(terminalGreenForward) < endLink;
+    bool isGreenReverseMine =
+            startLink <= static_cast<int>(terminalGreenReverse) && static_cast<int>(terminalGreenReverse) < endLink;
+    bool isBlueMine =
+            startLink <= static_cast<int>(terminalBlueForward) && static_cast<int>(terminalBlueForward) < endLink;
+    bool isBlueReverseMine =
+            startLink <= static_cast<int>(terminalBlueReverse) && static_cast<int>(terminalBlueReverse) < endLink;
+    bool isYellowMine =
+            startLink <= static_cast<int>(terminalYellowForward) && static_cast<int>(terminalYellowForward) < endLink;
+    bool isYellowReverseMine =
+            startLink <= static_cast<int>(terminalYellowReverse) && static_cast<int>(terminalYellowReverse) < endLink;
 
-        graphStateDynamic[terminalGreenForward]->waitingArea.push(troon);
+    if (greenTroonCounter < num_green_trains) {
+        if (isGreenMine) {
+            auto *troon = new Troon{
+                    t,
+                    troonIdCounter,
+                    graphStateDynamic[terminalGreenForward]->state.srcId,
+                    graphStateDynamic[terminalGreenForward]->state.destId,
+                    WAITING_AREA,
+                    GREEN,
+                    terminalGreenForward
+            };
+
+            graphStateDynamic[terminalGreenForward]->waitingArea.push(troon);
+        }
+
         greenTroonCounter++;
         troonIdCounter++;
     }
 
     if (greenTroonCounter < num_green_trains) {
-        auto *troon = new Troon{
-                t,
-                troonIdCounter,
-                graphStateDynamic[terminalGreenReverse]->state.srcId,
-                graphStateDynamic[terminalGreenReverse]->state.destId,
-                WAITING_AREA,
-                GREEN
-        };
+        if (isGreenReverseMine) {
+            auto *troon = new Troon{
+                    t,
+                    troonIdCounter,
+                    graphStateDynamic[terminalGreenReverse]->state.srcId,
+                    graphStateDynamic[terminalGreenReverse]->state.destId,
+                    WAITING_AREA,
+                    GREEN,
+                    terminalGreenReverse
+            };
 
-        graphStateDynamic[terminalGreenReverse]->waitingArea.push(troon);
+            graphStateDynamic[terminalGreenReverse]->waitingArea.push(troon);
+        }
+
         greenTroonCounter++;
         troonIdCounter++;
     }
 
     if (yellowTroonCounter < num_yellow_trains) {
-        auto *troon = new Troon{
-                t,
-                troonIdCounter,
-                graphStateDynamic[terminalYellowForward]->state.srcId,
-                graphStateDynamic[terminalYellowForward]->state.destId,
-                WAITING_AREA,
-                YELLOW
-        };
+        if (isYellowMine) {
+            auto *troon = new Troon{
+                    t,
+                    troonIdCounter,
+                    graphStateDynamic[terminalYellowForward]->state.srcId,
+                    graphStateDynamic[terminalYellowForward]->state.destId,
+                    WAITING_AREA,
+                    YELLOW,
+                    terminalYellowForward
+            };
 
-        graphStateDynamic[terminalYellowForward]->waitingArea.push(troon);
+            graphStateDynamic[terminalYellowForward]->waitingArea.push(troon);
+        }
+
         yellowTroonCounter++;
         troonIdCounter++;
     }
 
     if (yellowTroonCounter < num_yellow_trains) {
-        auto *troon = new Troon{
-                t,
-                troonIdCounter,
-                graphStateDynamic[terminalYellowReverse]->state.srcId,
-                graphStateDynamic[terminalYellowReverse]->state.destId,
-                WAITING_AREA,
-                YELLOW
-        };
+        if (isYellowReverseMine) {
+            auto *troon = new Troon{
+                    t,
+                    troonIdCounter,
+                    graphStateDynamic[terminalYellowReverse]->state.srcId,
+                    graphStateDynamic[terminalYellowReverse]->state.destId,
+                    WAITING_AREA,
+                    YELLOW,
+                    terminalYellowReverse
+            };
 
-        graphStateDynamic[terminalYellowReverse]->waitingArea.push(troon);
+            graphStateDynamic[terminalYellowReverse]->waitingArea.push(troon);
+        }
+
         yellowTroonCounter++;
         troonIdCounter++;
     }
 
     if (blueTroonCounter < num_blue_trains) {
-        auto *troon = new Troon{
-                t,
-                troonIdCounter,
-                graphStateDynamic[terminalBlueForward]->state.srcId,
-                graphStateDynamic[terminalBlueForward]->state.destId,
-                WAITING_AREA,
-                BLUE
-        };
+        if (isBlueMine) {
+            auto *troon = new Troon{
+                    t,
+                    troonIdCounter,
+                    graphStateDynamic[terminalBlueForward]->state.srcId,
+                    graphStateDynamic[terminalBlueForward]->state.destId,
+                    WAITING_AREA,
+                    BLUE,
+                    terminalBlueForward
+            };
 
-        graphStateDynamic[terminalBlueForward]->waitingArea.push(troon);
+            graphStateDynamic[terminalBlueForward]->waitingArea.push(troon);
+        }
+
         blueTroonCounter++;
         troonIdCounter++;
     }
 
     if (blueTroonCounter < num_blue_trains) {
-        auto *troon = new Troon{
-                t,
-                troonIdCounter,
-                graphStateDynamic[terminalBlueReverse]->state.srcId,
-                graphStateDynamic[terminalBlueReverse]->state.destId,
-                WAITING_AREA,
-                BLUE
-        };
+        if (isBlueReverseMine) {
+            auto *troon = new Troon{
+                    t,
+                    troonIdCounter,
+                    graphStateDynamic[terminalBlueReverse]->state.srcId,
+                    graphStateDynamic[terminalBlueReverse]->state.destId,
+                    WAITING_AREA,
+                    BLUE,
+                    terminalBlueReverse
+            };
 
-        graphStateDynamic[terminalBlueReverse]->waitingArea.push(troon);
+            graphStateDynamic[terminalBlueReverse]->waitingArea.push(troon);
+        }
+
         blueTroonCounter++;
         troonIdCounter++;
     }
@@ -442,29 +569,43 @@ void processLink(dynamicLinkState *dstate, size_t tick) {
         return;
     }
 
+    // clear buffer
+    for (auto &c: troons_buffer_to_send) {
+        c.clear();
+    }
+
     // TODO: send and receive the troon to the necessary node for OpenMPI
     if (dstate->linkDistance == (dstate->state.distance - 1)) {
         Troon *currTroon = dstate->troonAtLink;
         currTroon->arrivalTime = tick;
         currTroon->location = WAITING_AREA;
 
+        size_t nextLink;
+
         switch (currTroon->line) {
             case GREEN: // G
-                currTroon->src = graphStateDynamic[dstate->state.nextLinkGreen]->state.srcId;
-                currTroon->dest = graphStateDynamic[dstate->state.nextLinkGreen]->state.destId;
-                graphStateDynamic[dstate->state.nextLinkGreen]->waitingArea.push(currTroon);
+                nextLink = dstate->state.nextLinkGreen;
                 break;
             case YELLOW: // Y
-                currTroon->src = graphStateDynamic[dstate->state.nextLinkYellow]->state.srcId;
-                currTroon->dest = graphStateDynamic[dstate->state.nextLinkYellow]->state.destId;
-                graphStateDynamic[dstate->state.nextLinkYellow]->waitingArea.push(currTroon);
+                nextLink = dstate->state.nextLinkYellow;
                 break;
             case BLUE: // B
-                currTroon->src = graphStateDynamic[dstate->state.nextLinkBlue]->state.srcId;
-                currTroon->dest = graphStateDynamic[dstate->state.nextLinkBlue]->state.destId;
-                graphStateDynamic[dstate->state.nextLinkBlue]->waitingArea.push(currTroon);
+                nextLink = dstate->state.nextLinkBlue;
                 break;
+            default:
+                nextLink = -1;
+        }
 
+        currTroon->src = graphStateDynamic[nextLink]->state.srcId;
+        currTroon->dest = graphStateDynamic[nextLink]->state.destId;
+        currTroon->currentLink = nextLink;
+        if (startLink <= static_cast<int>(nextLink) && static_cast<int>(nextLink) < endLink) {
+            graphStateDynamic[nextLink]->waitingArea.push(currTroon);
+        } else {
+            // buffer it to be sent to other nodes
+            int nextNode = static_cast<int>(nextLink) / linksPerNode;
+            troons_buffer_to_send[nextNode].push_back(*currTroon);
+            delete currTroon;
         }
 
         dstate->linkCounter = 0;
@@ -473,7 +614,6 @@ void processLink(dynamicLinkState *dstate, size_t tick) {
     } else {
         dstate->linkDistance++;
     }
-
 }
 
 void processPushPlatform(dynamicLinkState *dstate) {
@@ -509,24 +649,24 @@ void processWaitPlatform(dynamicLinkState *dstate) {
     }
 }
 
-void initialization(size_t num_stations, const vector <string> &station_names, const vector <size_t> &popularities,
-                    const vector <string> &green_station_names, const vector <string> &yellow_station_names,
-                    const vector <string> &blue_station_names, const adjacency_matrix &mat) {// Create station mapping
+void initialization(size_t num_stations, const vector<string> &station_names, const vector<size_t> &popularities,
+                    const vector<string> &green_station_names, const vector<string> &yellow_station_names,
+                    const vector<string> &blue_station_names, const adjacency_matrix &mat) {// Create station mapping
     for (size_t i = 0; i < num_stations; i++) {
         const string &stationName = station_names[i];
         stationNameIdMapping[stationName] = i;
         stationIdNameMapping.push_back(stationName);
     }
 
-    std::vector <size_t> green_station_id;
-    std::vector <size_t> yellow_station_id;
-    std::vector <size_t> blue_station_id;
+    std::vector<size_t> green_station_id;
+    std::vector<size_t> yellow_station_id;
+    std::vector<size_t> blue_station_id;
 
     convertStationNamesToId(green_station_names, green_station_id);
     convertStationNamesToId(yellow_station_names, yellow_station_id);
     convertStationNamesToId(blue_station_names, blue_station_id);
 
-    std::map <std::pair<size_t, size_t>, size_t> tempLinkMapping;
+    std::map<std::pair<size_t, size_t>, size_t> tempLinkMapping;
     // initialize static link mapping
     // populate line green forward direction
     populateStaticData(popularities, mat, green_station_id, tempLinkMapping);
@@ -557,7 +697,7 @@ void initialization(size_t num_stations, const vector <string> &station_names, c
     assembleBlueLine(blue_station_id, tempLinkMapping, false);
 }
 
-void assembleGreenLine(const vector <size_t> &green_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleGreenLine(const vector<size_t> &green_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
                        bool isReverse) {
     size_t currentLink, nextLink, nextTwoStation;
     for (size_t i = 0; i < green_station_id.size() - 1; i++) {
@@ -581,7 +721,7 @@ void assembleGreenLine(const vector <size_t> &green_station_id, map <pair<size_t
     }
 }
 
-void assembleYellowLine(const vector <size_t> &yellow_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleYellowLine(const vector<size_t> &yellow_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
                         bool isReverse) {
     size_t currentLink, nextLink, nextTwoStation;
     for (size_t i = 0; i < yellow_station_id.size() - 1; i++) {
@@ -605,7 +745,7 @@ void assembleYellowLine(const vector <size_t> &yellow_station_id, map <pair<size
     }
 }
 
-void assembleBlueLine(const vector <size_t> &blue_station_id, map <pair<size_t, size_t>, size_t> &tempLinkMapping,
+void assembleBlueLine(const vector<size_t> &blue_station_id, map<pair<size_t, size_t>, size_t> &tempLinkMapping,
                       bool isReverse) {
     size_t currentLink, nextLink, nextTwoStation;
     for (size_t i = 0; i < blue_station_id.size() - 1; i++) {
@@ -630,10 +770,10 @@ void assembleBlueLine(const vector <size_t> &blue_station_id, map <pair<size_t, 
 }
 
 void populateStaticData(
-        const vector <size_t> &popularities,
+        const vector<size_t> &popularities,
         const adjacency_matrix &mat,
-        const vector <size_t> &station_id,
-        map <pair<size_t, size_t>, size_t> &tempLinkMapping
+        const vector<size_t> &station_id,
+        map<pair<size_t, size_t>, size_t> &tempLinkMapping
 ) {
     for (size_t i = 0; i < station_id.size() - 1; i++) {
         size_t currentStation = station_id[i];
@@ -653,7 +793,7 @@ void populateStaticData(
     }
 }
 
-void convertStationNamesToId(const vector <string> &station_names, vector <size_t> &station_id) {
+void convertStationNamesToId(const vector<string> &station_names, vector<size_t> &station_id) {
     for (const auto &green_station_name: station_names) {
         station_id.push_back(stationNameIdMapping[green_station_name]);
     }
@@ -692,9 +832,9 @@ string generateTroonDescription(const Troon &t) {
     return currentLine + std::to_string(t.id) + "-" + currentLocation;
 }
 
-vector <string> extract_station_names(string &line) {
+vector<string> extract_station_names(string &line) {
     constexpr char space_delimiter = ' ';
-    vector <string> stations{};
+    vector<string> stations{};
     line += ' ';
     size_t pos;
     while ((pos = line.find(space_delimiter)) != string::npos) {
@@ -724,7 +864,7 @@ int main(int argc, char **argv) {
 
     // Read station names.
     string station;
-    std::vector <string> station_names{};
+    std::vector<string> station_names{};
     station_names.reserve(S);
     for (size_t i = 0; i < S; ++i) {
         ifs >> station;
@@ -733,7 +873,7 @@ int main(int argc, char **argv) {
 
     // Read P popularity
     size_t p;
-    std::vector <size_t> popularities{};
+    std::vector<size_t> popularities{};
     popularities.reserve(S);
     for (size_t i = 0; i < S; ++i) {
         ifs >> p;

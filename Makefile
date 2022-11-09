@@ -1,7 +1,7 @@
 CXX=mpiCC
 #CXX=g++
+#CXXFLAGS:=-Wall -Werror -pedantic -std=c++17
 CXXFLAGS:=-Wall -Werror -pedantic -std=c++17
-#CXXFLAGS:=-Wall -pedantic -std=c++17
 RELEASEFLAGS:=-O3
 DEBUGFLAGS:=-g
 SOURCEDIR=src
