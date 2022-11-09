@@ -107,6 +107,8 @@ void spawnTroons(size_t num_green_trains, size_t num_yellow_trains, size_t num_b
 
 void printTroons(size_t ticks, size_t num_lines, size_t t);
 
+void clean();
+
 // mapping
 map<string, uint32_t> stationNameIdMapping;
 vector<string> stationIdNameMapping;
@@ -196,6 +198,24 @@ void simulate(
 
         // master only
         printTroons(ticks, num_lines, t);
+    }
+
+    // for each node
+    clean();
+}
+
+void clean() {
+    for (auto c: graphStateDynamic) {
+        delete c->troonAtPlatform;
+        delete c->troonAtLink;
+
+        while (!c->waitingArea.empty()) {
+            Troon *troon = c->waitingArea.top();
+            delete troon;
+            c->waitingArea.pop();
+        }
+
+        delete c;
     }
 }
 
