@@ -133,7 +133,7 @@ void clean();
 
 void createMpiTroonType();
 
-void exchangeTroons();
+void exchangeTroons(size_t tick);
 
 // mapping
 map<string, uint32_t> stationNameIdMapping;
@@ -237,17 +237,21 @@ void simulate(
 
     linksPerNode = (static_cast<int>(graphState.size()) + nprocs - 1) / nprocs;
 
-    for (size_t t = 0; t < ticks; t++) {
-        // for each node
-        startLink = myid * linksPerNode;
-        endLink = min(static_cast<int>(graphStateDynamic.size()), (myid + 1) * linksPerNode);
+    // for each node
+    startLink = myid * linksPerNode;
+    endLink = min(static_cast<int>(graphStateDynamic.size()), (myid + 1) * linksPerNode);
 
+#ifdef DEBUG
+    cout << myid << " handles " << startLink << " -> " << endLink - 1 << endl;
+#endif
+
+    for (size_t t = 0; t < ticks; t++) {
         for (int i = startLink; i < endLink; i++) {
             processLink(graphStateDynamic[i], t);
         }
 
         MPI_Barrier(MPI_COMM_WORLD);
-        exchangeTroons();
+        exchangeTroons(t);
 
         for (int i = startLink; i < endLink; i++) {
             processPushPlatform(graphStateDynamic[i]);
@@ -272,15 +276,18 @@ void simulate(
     MPI_Finalize();
 }
 
-void exchangeTroons() {
+void exchangeTroons(size_t tick) {
     for (int j = 0; j < nprocs; j++) {
         troons_counter[j] = static_cast<int>(troons_buffer_to_send[j].size());
     }
 
     MPI_Alltoall(troons_counter, 1, MPI_INT, troons_counter_recv_buffer, 1, MPI_INT, MPI_COMM_WORLD);
+
 #ifdef DEBUG
-    for (int j = 0; j < nprocs; j++) {
-        cout << myid << " from " << j << " : " << troons_counter_recv_buffer[j] << endl;
+    if (tick >= 24) { // Change to check which tick to observe
+        for (int j = 0; j < nprocs; j++) {
+            cout << j  << " -> " << myid << " at " << tick << " : " << troons_counter_recv_buffer[j] << endl;
+        }
     }
 #endif
 
@@ -289,6 +296,13 @@ void exchangeTroons() {
     for (int i = 0; i < nprocs; i++) {
         int toSendSize = static_cast<int>(troons_buffer_to_send[i].size());
         Troon *buffer_send = &troons_buffer_to_send[i][0];
+
+#ifdef DEBUG
+        if (toSendSize > 0) {
+            cout << tick << " | " << myid << " sending to " << i << " " << toSendSize << " troons" << endl;
+        }
+#endif
+
         MPI_Isend(buffer_send, toSendSize, mpi_troon_type, i, 0, MPI_COMM_WORLD, &req[i * 2]);
 
         int toReceiveSize = troons_counter_recv_buffer[i];
@@ -311,7 +325,8 @@ void exchangeTroons() {
             Troon *t = &troons_recv_buffer[i][j];
             desiredLink = t->currentLink;
 #ifdef DEBUG
-            cout << myid << " receive troon: " << generateTroonDescription(*t) << desiredLink << endl;
+            cout << tick << " | Id: " << myid << " receive troon: " << generateTroonDescription(*t) << desiredLink
+                 << endl;
 #endif
             graphStateDynamic[desiredLink]->waitingArea.push(t);
         }
@@ -575,12 +590,6 @@ void processLink(dynamicLinkState *dstate, size_t tick) {
         return;
     }
 
-    // clear buffer
-    for (auto &c: troons_buffer_to_send) {
-        c.clear();
-    }
-
-    // TODO: send and receive the troon to the necessary node for OpenMPI
     if (dstate->linkDistance == (dstate->state.distance - 1)) {
         Troon *currTroon = dstate->troonAtLink;
         currTroon->arrivalTime = tick;
