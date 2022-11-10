@@ -299,6 +299,10 @@ void exchangeTroons() {
 
     MPI_Waitall(nprocs * 2, req, MPI_STATUS_IGNORE);
 
+    for (auto &c: troons_buffer_to_send) {
+        c.clear();
+    }
+
     // insert all the troons
     size_t desiredLink;
     for (int i = 0; i < nprocs; i++) {
